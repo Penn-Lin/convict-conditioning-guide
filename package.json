@@ -8,7 +8,8 @@
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && node scripts/gen-sitemap.mjs",
+    "check:lock": "node scripts/check-lock.mjs",
+    "build": "node scripts/check-lock.mjs && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && node scripts/gen-sitemap.mjs",
     "build:sitemap": "node scripts/gen-sitemap.mjs",
     "preview": "vite preview"
   },
