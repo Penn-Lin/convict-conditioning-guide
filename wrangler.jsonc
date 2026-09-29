@@ -22,6 +22,12 @@
 
   "compatibility_date": "2026-09-29",
 
+  // 显式开启 workers.dev 子域。
+  // 原因：仓库里一旦存在 wrangler 配置文件，它就成为该 Worker 的**完整描述**，
+  // 未声明的开关会被视为「关闭」。若不写这一行，可能出现「构建与部署都成功、
+  // 但访问地址打不开」的表现。写死为 true 可避免。
+  "workers_dev": true,
+
   // 纯静态资源：把构建产物 dist/ 直接作为站点发布，不跑任何 Worker 脚本
   "assets": {
     "directory": "./dist",
