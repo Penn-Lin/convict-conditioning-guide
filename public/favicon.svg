@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="囚徒健身">
+  <!-- 单色图标：方框（囚）+ 内部递进阶梯（六艺十式的进阶语义），
+       使用 currentColor 无法在 favicon 中生效，故采用中性深色描边，
+       在浅色与深色浏览器标签页下均保持可辨识。 -->
+  <rect x="3.5" y="3.5" width="25" height="25" rx="5" fill="none" stroke="#1A1D21" stroke-width="2.4"/>
+  <!-- 三级递进阶梯 -->
+  <path d="M9 21.5 V16.5 H14 V12.5 H19 V8.5 H23" fill="none" stroke="#1A1D21" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 顶点圆点 -->
+  <circle cx="23" cy="8.5" r="1.8" fill="#1A1D21"/>
+</svg>

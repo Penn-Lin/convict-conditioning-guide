@@ -1,0 +1,154 @@
+classDiagram
+    class ArtSlug {
+        <<enumeration>>
+        pushups
+        squats
+        pullups
+        leg-raises
+        bridges
+        handstand-pushups
+    }
+
+    class MoveDifficulty {
+        <<enumeration>>
+        入门
+        初级
+        中级
+        进阶
+        高阶
+    }
+
+    class ArtRef {
+        +string slug
+        +string nameZh
+        +string nameEn
+    }
+
+    class StepRef {
+        +number stepNo
+        +string nameZh
+        +string href
+    }
+
+    class Move {
+        +ArtRef artRef
+        +number stepNo
+        +string nameZh
+        +string nameEn
+        +string english
+        +MoveDifficulty difficulty
+        +string description
+        +string[] steps
+        +string[] keyPoints
+        +string[] commonMistakes
+        +string progressionStandard
+        +string regression
+        +string trainingGoal
+        +string[] muscles
+        +string riskNote
+        +StepRef prevStep
+        +StepRef nextStep
+    }
+
+    class ResolvedMove {
+        +StepRef prevStep
+        +StepRef nextStep
+        +string slug
+    }
+
+    class Art {
+        +ArtSlug slug
+        +number order
+        +string nameZh
+        +string nameEn
+        +string tagline
+        +string intro
+        +string[] muscles
+        +Move[] moves
+    }
+
+    class DataLayer {
+        +Art[] arts
+        +ResolvedMove[] allMoves
+        +getArt(slug) Art
+        +getMove(artSlug, stepNo) ResolvedMove
+        +getMoveBySlug(slug) ResolvedMove
+        +getMovesByArt(artSlug) ResolvedMove[]
+        +getAdjacentArts(slug) AdjacentArts
+    }
+
+    class SlugLib {
+        +moveSlug(artSlug, stepNo) string
+        +parseMoveSlug(slug) object
+    }
+
+    class FigureRatio {
+        <<enumeration>>
+        3/4
+        3/2
+        1/1
+    }
+
+    class FigureSlotProps {
+        +FigureRatio ratio
+        +string label
+        +string badge
+        +string note
+        +string className
+    }
+
+    class FigureSlot {
+        +FigureSlotProps props
+        +render()
+    }
+
+    class ArtCard {
+        +Art art
+        +render()
+    }
+    class MoveCard {
+        +ResolvedMove move
+        +render()
+    }
+    class PrevNextNav {
+        +StepRef prevStep
+        +StepRef nextStep
+        +render()
+    }
+    class ThemeToggle {
+        +string theme
+        +toggle()
+        +render()
+    }
+    class UseTheme {
+        +string theme
+        +toggle()
+        +syncHtmlClass()
+    }
+    class MoveDetail {
+        +render()
+    }
+
+    Art "1" *-- "10" Move : contains
+    Move --> ArtRef : has
+    Move --> StepRef : prevStep
+    Move --> StepRef : nextStep
+    Move --> MoveDifficulty : has
+    Art --> ArtSlug : has
+    ArtRef --> ArtSlug : has
+    ResolvedMove --|> Move
+    DataLayer --> Art : aggregates
+    DataLayer --> ResolvedMove : exposes
+    DataLayer ..> SlugLib : uses
+
+    ArtCard --> FigureSlot : uses(封面 3/4)
+    MoveCard --> FigureSlot : uses(缩略 1/1)
+    MoveDetail --> FigureSlot : uses(主图 3/2)
+    MoveDetail --> PrevNextNav : uses
+    MoveDetail --> DataLayer : reads
+    ThemeToggle --> UseTheme : uses
+    FigureSlot ..> FigureRatio : has
+
+    note for FigureSlot "v1.3 图位：固定 aspect-ratio + role=img + aria-label；不画任何图形；label 由 lib/figureLabel.ts 生成；将来补图仅加可选 src，不改结构"
+    note for DataLayer "v1.3 已删除 allPoses / getPose / getPoseByMove / getArtCoverPose"
+    note for Art "v1.3 已删除 coverPose 字段"

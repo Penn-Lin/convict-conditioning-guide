@@ -1,0 +1,57 @@
+sequenceDiagram
+    actor U as 用户
+    participant R as React Router
+    participant L as AppLayout
+    participant P as 页面组件
+    participant D as data/index.ts
+    participant F as FigureSlot
+
+    Note over U,L: 场景零：主题初始化与切换（v1.1 保留）
+    U->>L: 打开任意页面
+    L->>L: index.html 内联脚本读 localStorage['theme']
+    L->>L: 若为 dark → html.classList.add('dark')（首屏前，防闪烁）
+    U->>L: 点击 ThemeToggle
+    L->>L: useTheme.toggle → 写 localStorage + 同步 <html> class
+    Note over U,F: 主题类切换 → FigureSlot 的语义 token（bg-surface-2/border-border/text-muted）自动适配（P0-17，无需重渲染数据）
+
+    Note over U,D: 场景一：打开首页
+    U->>R: 访问 /
+    R->>L: 渲染 Header + Footer + DisclaimerBar
+    R->>P: 挂载 Home
+    P->>D: 读取 arts（6 艺元数据）
+    D-->>P: Art[]
+    P->>F: 每张 ArtCard 渲染 FigureSlot（ratio=3/4，label=艺名+定位语）
+
+    Note over U,D: 场景二：浏览六艺 → 进入十式
+    U->>R: 点击 ArtCard → /arts/pushups
+    R->>P: 挂载 ArtDetail(artSlug=pushups)
+    P->>D: getArt('pushups')
+    D-->>P: Art（10 moves，prev/next 已派生）
+    P->>F: MoveCard 列表各渲染 FigureSlot（ratio=1/1，badge=第 N 式）
+    U->>R: 点击某式 → /arts/pushups/5
+    R->>P: 挂载 MoveDetail(artSlug, stepNo=5)
+    P->>D: getMove('pushups', 5)
+    D-->>P: ResolvedMove（或 undefined）
+    alt 式不存在
+        P->>P: 渲染 NotFound 内容
+    else 式存在
+        P->>F: 顶部单一 FigureSlot（ratio=3/2，label=动作描述，badge=第 5 式）
+        Note over F: role="img" + aria-label=label；当前无图 → 极简占位（不画图形）
+        P->>P: 渲染 13 字段卡片 + riskNote（若有）
+    end
+
+    Note over U,D: 场景三：上一式 / 下一式跳转
+    U->>P: 点击 PrevNextNav 下一式
+    P->>P: 读取 nextStep.href = /arts/pushups/6
+    P->>R: navigate(href)
+    R->>P: 重新挂载 MoveDetail(stepNo=6)
+    P->>D: getMove('pushups', 6)
+    D-->>P: ResolvedMove
+    P->>F: 重新渲染 FigureSlot（label/badge 换为新式）
+    P-->>U: 渲染新式（滚动复位）
+
+    Note over U,D: 边界：第 1 式 prev=null / 第 10 式 next=null
+    P->>P: nextStep 为 null → 渲染「已是本艺最后一式」+ 返回艺详情
+
+    Note over U,D: 边界：图位恒可渲染（不依赖任何图片/姿态数据）
+    P->>F: FigureSlot 恒渲染占位（不破版、不报错）；将来补图仅换内部内容，不改结构

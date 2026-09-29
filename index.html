@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>囚徒健身 · 六艺十式动作指导站</title>
+    <meta
+      name="description"
+      content="《囚徒健身》六艺十式（60 式）结构化动作指导：分解步骤、要领要点、常见错误、进阶标准与安全提示，专为手机阅读优化。"
+    />
+
+    <!-- 基础 OG 元信息 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="囚徒健身 · 六艺十式动作指导站" />
+    <meta
+      property="og:description"
+      content="六艺十式（60 式）结构化动作指导：分解步骤、要领要点、常见错误、进阶标准与安全提示。"
+    />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:image" content="/favicon.svg" />
+
+    <!--
+      主题初始化内联脚本（防首屏闪烁 / FOUC —— 架构 §9.3.3）。
+      必须在 React 挂载之前、同步执行：读取 localStorage['theme']，若生效主题为深色，
+      立即给 <html> 加 class="dark"，避免「先浅后深」闪一下。
+
+      存储格式与 src/hooks/useTheme.ts → useLocalStorage **保持一致**：
+      值为 **JSON 编码字符串**（如 `"dark"` / `"light"`），故此处必须 `JSON.parse`。
+      兼容与兜底规则（与 useTheme.resolveTheme 一致，首版不跟随系统）：
+      - 解析失败（旧裸值 'dark'、脏值 '{bad json' 等）→ catch 吞掉 → 回落浅色，绝不抛错阻断后续脚本；
+      - 值为 null（首次访问）→ 回落浅色；
+      - 值为 'light' / 'system' → 均回落浅色（不跟随系统）。
+    -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('theme');
+          var theme = raw === null ? 'light' : JSON.parse(raw);
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {
+          /* 解析失败 → 回落浅色（不做任何事） */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

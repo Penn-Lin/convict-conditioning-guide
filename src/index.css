@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+   双主题 CSS 变量（架构 §9.3.2）
+   —— 通道值以「空格分隔的 RGB」存储，以支持 Tailwind 透明度修饰符（如 bg-bg/80）
+   —— 浅色为默认（:root），深色为可选覆盖（.dark），两者共用同一套语义 token 名
+   =========================================================================== */
+
+/* 浅色主题（默认，PRD §7.2.1 实测值） */
+:root {
+  --bg: 255 255 255;         /* #FFFFFF */
+  --surface: 247 248 250;    /* #F7F8FA */
+  --surface-2: 238 241 244;  /* #EEF1F4 */
+  --border: 208 213 221;     /* #D0D5DD */
+  --text: 26 29 33;          /* #1A1D21  对白底 16.9:1 */
+  --text-muted: 82 88 95;    /* #52585F  对白底 7.2:1  */
+  --accent: 194 65 12;       /* #C2410C  对白底 5.2:1  */
+  --success: 21 128 61;      /* #15803D  对白底 5.0:1  */
+  --danger: 185 28 28;       /* #B91C1C  对白底 6.5:1  */
+  --lv-1: 21 128 61;         /* 入门 #15803D */
+  --lv-2: 29 78 216;         /* 初级 #1D4ED8 */
+  --lv-3: 180 83 9;          /* 中级 #B45309 */
+  --lv-4: 194 65 12;         /* 进阶 #C2410C */
+  --lv-5: 185 28 28;         /* 高阶 #B91C1C */
+}
+
+/* 深色主题（可选切换，非默认，PRD §7.2.2） */
+.dark {
+  --bg: 15 17 21;            /* #0F1115 */
+  --surface: 23 25 28;       /* #17191C */
+  --surface-2: 34 37 42;     /* #22252A */
+  --border: 46 50 56;        /* #2E3238 */
+  --text: 242 244 247;       /* #F2F4F7 */
+  --text-muted: 166 173 181; /* #A6ADB5 */
+  --accent: 255 122 69;      /* #FF7A45 */
+  --success: 74 222 128;     /* #4ADE80 */
+  --danger: 248 113 113;     /* #F87171 */
+  --lv-1: 74 222 128;        /* #4ADE80 */
+  --lv-2: 96 165 250;        /* #60A5FA */
+  --lv-3: 251 191 36;        /* #FBBF24 */
+  --lv-4: 251 146 60;        /* #FB923C */
+  --lv-5: 248 113 113;       /* #F87171 */
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    /* 平滑滚动（受 prefers-reduced-motion 约束，见下） */
+    scroll-behavior: smooth;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* 键盘可达焦点环（禁止移除，见 §9.7） */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-bg;
+  }
+
+  /* 尊重「减少动态效果」偏好（§9.7.3） */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
