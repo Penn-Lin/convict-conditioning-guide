@@ -125,27 +125,38 @@ export function UiShowcase() {
         </Block>
 
         <Block title="ArtCard 六艺卡片">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <ArtCard
+              slug="pushups"
               order={1}
               nameZh="俯卧撑"
               nameEn="Push-ups"
               tagline="上肢推力的根基，检验力量水平的黄金标准"
               href="/arts/pushups"
+              progress={{ value: 4, total: 10 }}
+              statusLabel="进行中"
+              currentStepName="半俯卧撑"
             />
             <ArtCard
+              slug="squats"
               order={2}
               nameZh="深蹲"
               nameEn="Squats"
               tagline="下肢力量的基石，撬动全身爆发力"
               href="/arts/squats"
+              progress={{ value: 3, total: 10 }}
+              statusLabel="进行中"
+              currentStepName="支撑深蹲"
             />
             <ArtCard
+              slug="pullups"
               order={3}
               nameZh="引体向上"
               nameEn="Pull-ups"
               tagline="背部与拉力的王者，单杠上的力量阶梯"
               href="/arts/pullups"
+              progress={{ value: 10, total: 10 }}
+              statusLabel="已完成"
             />
           </div>
         </Block>

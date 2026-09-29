@@ -51,8 +51,8 @@ export function DifficultyBadge({
   return (
     <span
       className={[
-        'inline-flex items-center gap-1.5 rounded border px-2 py-0.5',
-        'text-xs font-medium leading-tight',
+        'inline-flex items-center gap-1.5 rounded-pill border px-2 py-0.5',
+        'text-xs font-semibold leading-tight',
         tokenClass,
         className,
       ]

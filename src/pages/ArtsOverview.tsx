@@ -1,85 +1,200 @@
 /**
- * ArtsOverview —— 六艺总览页（架构 §4.1 / PRD §3.2 · P0-2 · T09）。
+ * ArtsOverview —— 六艺总览页（v2）。
  *
- * 信息架构：
- * - 面包屑（首页 / 六艺）；
- * - H1「六艺总览」+ 引导语；
- * - **6 张六艺卡片**（`ArtCard`，封面图位 3/4）：数据来自 `@/data` 的 `arts`（已按原书顺序升序）；
- * - **推荐练习顺序说明**：从 `arts` 派生顺序，不硬编码任何艺名 / 路径。
- *
- * 约束：站内跳转一律 `<Link>`；移动优先网格（移动 1 列 / 平板 2 列 / 桌面 3×2）；
- * 颜色只走语义 token；正文 ≥16px、行高 ≥1.7。
+ * 与 v1 的差别：卡片从「3:4 空封面图位 + 三行字」换成紧凑进度卡，
+ * 并把「推荐练习顺序」从纯文字列表改成带状态的时间线（哪门练完了、哪门在练、哪门没碰）。
  */
 import { Link } from 'react-router-dom';
+import { Check, Circle, Dot } from 'lucide-react';
+import type { ArtSlug } from '@/types';
 import { arts } from '@/data';
+import { ART_ORDER, MOVES_PER_ART, SITE_NAME } from '@/lib/constants';
+import { artTheme } from '@/lib/artTheme';
+import type { ProgressState } from '@/lib/artTheme';
+import { useDocumentMeta } from '@/lib/seo';
+import { useTraining } from '@/hooks/TrainingProvider';
 import { ArtCard } from '@/components/ui/ArtCard';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
-import { useDocumentMeta } from '@/lib/seo';
-import { SITE_NAME } from '@/lib/constants';
+
+/** 状态 → 时间线标记（形状通道：✓ / ● / ○，不只靠颜色） */
+function Marker({ state }: { state: ProgressState }) {
+  if (state === 'done') {
+    return (
+      <span className="flex h-7 w-7 items-center justify-center rounded-pill bg-success text-bg">
+        <Check aria-hidden="true" className="h-4 w-4" strokeWidth={3} />
+      </span>
+    );
+  }
+  if (state === 'current') {
+    return (
+      <span className="flex h-7 w-7 items-center justify-center rounded-pill bg-accent text-bg">
+        <Dot aria-hidden="true" className="h-6 w-6" strokeWidth={7} />
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-7 w-7 items-center justify-center rounded-pill border-2 border-border-strong text-subtle">
+      <Circle aria-hidden="true" className="h-3 w-3" strokeWidth={2.5} />
+    </span>
+  );
+}
 
 export function ArtsOverview() {
-  // 描述文案中的艺名由数据派生，避免在页面硬编码任何艺名（架构 §5.4.5 / 任务书要求）。
   const artNames = arts.map((art) => art.nameZh).join('、');
   useDocumentMeta(
     `六艺总览 · ${SITE_NAME}`,
-    `《囚徒健身》六艺一览：${artNames}六门基础动作，每门十式渐进，含推荐练习顺序。`,
+    `《囚徒健身》六艺一览：${artNames}六门基础动作，每门十式渐进，含推荐练习顺序与你的当前进度。`,
   );
 
+  const { store } = useTraining();
+  const skills = store.skills;
+
+  /** 某艺的进度与状态 */
+  const stateOf = (slug: ArtSlug) => {
+    const skill = skills[slug];
+    const done = Math.min(MOVES_PER_ART, skill.completedSteps.length);
+    const status: ProgressState =
+      done >= MOVES_PER_ART ? 'done' : skill.lastTrainedAt ? 'current' : 'idle';
+    const stepNo = Math.min(MOVES_PER_ART, skill.currentStep);
+    const art = arts.find((item) => item.slug === slug);
+    return {
+      done,
+      status,
+      stepNo,
+      currentStepName:
+        done < MOVES_PER_ART
+          ? (art?.moves.find((move) => move.stepNo === stepNo)?.nameZh ?? null)
+          : null,
+    };
+  };
+
+  const totalDone = ART_ORDER.reduce(
+    (sum, slug) => sum + Math.min(MOVES_PER_ART, skills[slug].completedSteps.length),
+    0,
+  );
+  const totalMoves = ART_ORDER.length * MOVES_PER_ART;
+
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-8">
+    <main className="mx-auto w-full max-w-5xl px-4 pb-nav pt-6">
       <Breadcrumb items={[{ label: '首页', href: '/' }, { label: '六艺' }]} />
 
-      <header className="mt-4">
-        <h1 className="text-2xl font-bold leading-tight text-text sm:text-3xl">六艺总览</h1>
-        <p className="mt-3 max-w-prose text-base leading-[1.7] text-text">
-          六门基础动作门类，构成《囚徒健身》的核心体系。每门各含 10 个递进难度动作，点开任意一门，
-          即可查看它的十式进阶路径与全部动作的分解指导。
+      <header className="mt-3">
+        <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-text sm:text-3xl">
+          六艺总览
+        </h1>
+        <p className="mt-2.5 max-w-prose text-base leading-[1.75] text-text">
+          六门基础动作门类，构成《囚徒健身》的核心体系。每门各含 10 个递进难度动作。
+          点开任意一门，即可查看十式进阶路径、打卡进阶条件。
+        </p>
+        <p className="tnum mt-3 inline-flex items-center gap-2 rounded-pill bg-surface2 px-3 py-1.5 text-sm font-semibold text-muted">
+          总体进度
+          <span className="font-mono text-text">
+            {totalDone}
+            <span className="text-subtle">/{totalMoves}</span>
+          </span>
         </p>
       </header>
 
-      {/* 6 张六艺卡片（移动 1 列 / 平板 2 列 / 桌面 3×2） */}
       <section aria-labelledby="arts-grid-heading" className="mt-6">
-        <h2 id="arts-grid-heading" className="text-xl font-bold text-text">
+        <h2 id="arts-grid-heading" className="text-lg font-bold text-text">
           六门艺
         </h2>
-        <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {arts.map((art) => (
-            <li key={art.slug}>
-              <ArtCard
-                className="h-full"
-                order={art.order}
-                nameZh={art.nameZh}
-                nameEn={art.nameEn}
-                tagline={art.tagline}
-                href={`/arts/${art.slug}`}
-              />
-            </li>
-          ))}
+        <ul className="mt-3.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {arts.map((art) => {
+            const info = stateOf(art.slug);
+            return (
+              <li key={art.slug}>
+                <ArtCard
+                  slug={art.slug}
+                  order={art.order}
+                  nameZh={art.nameZh}
+                  nameEn={art.nameEn}
+                  tagline={art.tagline}
+                  href={`/arts/${art.slug}`}
+                  progress={{ value: info.done, total: MOVES_PER_ART }}
+                  statusLabel={
+                    info.status === 'done'
+                      ? '已完成'
+                      : info.status === 'current'
+                        ? '进行中'
+                        : '未开始'
+                  }
+                  currentStepNo={info.stepNo}
+                  currentStepName={info.currentStepName}
+                />
+              </li>
+            );
+          })}
         </ul>
       </section>
 
-      {/* 推荐练习顺序说明（顺序由 `arts` 派生，不含硬编码艺名） */}
-      <section aria-labelledby="arts-order-heading" className="mt-10">
-        <h2 id="arts-order-heading" className="text-xl font-bold text-text">
+      {/* 推荐练习顺序（带状态的时间线） */}
+      <section aria-labelledby="arts-order-heading" className="mt-8">
+        <h2 id="arts-order-heading" className="text-lg font-bold text-text">
           推荐练习顺序
         </h2>
-        <p className="mt-3 max-w-prose text-base leading-[1.7] text-text">
-          《囚徒健身》建议按原书顺序逐艺推进：先把一门艺从第 1 式练到第 10 式、达到其「进阶标准」后，
-          再进入下一门。不追求同时推进多门，稳扎稳打更重要。
+        <p className="mt-2.5 max-w-prose text-base leading-[1.75] text-muted">
+          《囚徒健身》建议按原书顺序逐艺推进：先把一门艺从第 1 式练到第 10 式、
+          达到其「进阶标准」后，再进入下一门。不追求同时推进多门，稳扎稳打更重要。
         </p>
-        <ol className="mt-4 flex flex-col gap-3">
-          {arts.map((art) => (
-            <li key={art.slug} className="text-base leading-[1.7] text-text">
-              <span className="mr-2 font-mono text-sm text-muted">{art.order}.</span>
-              <Link
-                to={`/arts/${art.slug}`}
-                className="font-semibold text-accent underline-offset-2 hover:underline"
-              >
-                {art.nameZh}
-              </Link>
-              <span className="text-muted">（{art.nameEn}）— {art.tagline}</span>
-            </li>
-          ))}
+
+        <ol className="mt-4 flex list-none flex-col gap-3 p-0">
+          {arts.map((art, index) => {
+            const info = stateOf(art.slug);
+            const theme = artTheme(art.slug);
+            const isLast = index === arts.length - 1;
+            const badgeClass =
+              info.status === 'done'
+                ? 'bg-success-soft text-success'
+                : info.status === 'current'
+                  ? 'bg-accent-soft text-accent'
+                  : 'bg-surface2 text-muted';
+            const badgeText =
+              info.status === 'done'
+                ? '已完成'
+                : info.status === 'current'
+                  ? `第 ${info.stepNo} 式`
+                  : '未开始';
+
+            return (
+              <li key={art.slug} className="flex gap-3.5">
+                <span className="flex flex-col items-center">
+                  <Marker state={info.status} />
+                  {!isLast ? (
+                    <span aria-hidden="true" className="mt-1 w-px flex-1 bg-border" />
+                  ) : null}
+                </span>
+
+                <Link
+                  to={`/arts/${art.slug}`}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-surface p-3 shadow-card transition-colors hover:border-border-strong"
+                >
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-base font-bold text-text">{art.nameZh}</span>
+                    <span className="font-mono text-[11px] text-subtle">
+                      {art.nameEn}
+                    </span>
+                    <span
+                      className={[
+                        'rounded-pill px-1.5 py-0.5 text-[11px] font-bold',
+                        badgeClass,
+                      ].join(' ')}
+                    >
+                      {badgeText}
+                    </span>
+                  </span>
+                  <span className="mt-1 block text-sm leading-relaxed text-muted">
+                    {art.tagline}
+                  </span>
+                  <span
+                    className={['mt-1.5 block text-xs font-semibold', theme.text].join(' ')}
+                  >
+                    {info.currentStepName ?? `${MOVES_PER_ART} 式全部完成`}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ol>
       </section>
     </main>

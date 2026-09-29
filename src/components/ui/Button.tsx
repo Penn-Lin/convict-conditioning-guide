@@ -10,23 +10,27 @@ import type { MouseEventHandler, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 /** 按钮视觉变体 */
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 /** 按钮尺寸 */
 export type ButtonSize = 'md' | 'lg';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
-  primary: 'border border-transparent bg-accent text-bg hover:opacity-90',
-  secondary: 'border border-border bg-surface text-text hover:border-accent',
+  // `text-bg` 而非 `text-white`：浅色主题下 bg≈白（5.2:1），
+  // 深色主题下 bg≈近黑（对亮色 accent ≈7:1）—— 一套写法同时满足两套主题。
+  primary: 'border border-transparent bg-accent text-bg hover:brightness-110',
+  secondary:
+    'border border-border-strong bg-surface text-text hover:border-accent hover:text-accent',
   ghost: 'border border-transparent bg-transparent text-text hover:bg-surface2',
+  danger: 'border border-transparent bg-danger text-bg hover:brightness-110',
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
-  md: 'min-h-[44px] px-4 text-sm',
-  lg: 'min-h-[48px] px-5 text-base',
+  md: 'min-h-[46px] px-4 text-sm',
+  lg: 'min-h-[54px] px-5 text-base',
 };
 
 const BASE_CLASS =
-  'inline-flex items-center justify-center gap-2 rounded font-medium transition-colors disabled:pointer-events-none disabled:opacity-50';
+  'inline-flex items-center justify-center gap-2 rounded-md font-semibold transition-[filter,color,border-color,background-color,transform] duration-150 ease-smooth active:scale-[0.985] disabled:pointer-events-none disabled:opacity-45';
 
 /** 两种形态共有的 props */
 interface ButtonCommonProps {

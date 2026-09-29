@@ -1,29 +1,19 @@
 /**
- * MoveDetail —— 十式详情页（路由 `/arts/:artSlug/:stepNo`，全站核心页 · T10）。
+ * MoveDetail —— 十式详情页（路由 `/arts/:artSlug/:stepNo`，全站核心页）。
  *
- * 使用场景（PRD US-3）：训练中掏出手机，快速查「这一式怎么做、常见错误是什么」。
- * 因此以「手机上能否一眼看清」为第一标准：
- * - **首屏**即呈现：式名 + 难度 + 主图位 + 动作描述开头；
- * - **阅读顺序**（PRD §7.4）：面包屑 → 标题区 → 主图位 → 描述 → 风险提示（若有）
- *   → 页内锚点条 → 分解步骤 → 要领要点 → 常见错误 → 进阶标准 → 训练目标
- *   → 降阶方案 → 发力肌群 → 安全入口 → 上一式/下一式；
- * - **折叠策略**（PRD §7.4）：分解步骤 / 要领要点 / 常见错误 / 进阶标准**默认展开**
- *   （训练现场最高频），降阶方案 / 发力肌群**默认折叠**（次要信息）。
+ * 使用场景：训练中掏出手机，快速查「这一式怎么做」，并**打卡确认进阶条件**。
  *
- * 可访问性（架构 §9.7）：
- * - 折叠面板用 `<button aria-expanded aria-controls>` + `role="region" aria-labelledby`，
- *   键盘可达、`min-h-11`（≥44px）；
- * - 页内锚点条用原生 `<a href="#id">`（键盘可达、读屏可读）；
- * - 难度「文字 + 颜色」双通道（`DifficultyBadge`）；常见错误的「错误表现 / 纠正方法」
- *   用文字标签区分，**不靠颜色单独承载信息**；
- * - 零硬编码色值，全部语义 token；正文 ≥16px、行高 ≥1.7。
+ * v2 阅读顺序（相对 v1 的两处关键调整）：
+ * - **紧凑图位条**替代 v1 的 250px 高空灰框 —— 首屏还给标题与打卡卡；
+ * - **进阶条件卡上提到「动作描述之后、分块内容之前」** —— v1 的进阶标准埋在页面最底部，
+ *   而它恰恰是用户最需要操作的部分。现在它紧跟描述，勾完再往下看细节。
  *
- * 非法参数（架构 §4.1）：`artSlug` 不存在或 `stepNo` 非 1–10 / 越界 → 渲染与 404
- * **完全一致**的内容（复用 `NotFoundContent`），不白屏、不抛错。
+ * 可访问性：折叠面板用 `<button aria-expanded aria-controls>` + `role="region"`；
+ * 页内锚点用原生 `<a href="#id">`；难度「文字 + 颜色」双通道；正文 ≥16px / 行高 ≥1.7。
  */
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronDown, TriangleAlert } from 'lucide-react';
+import { ChevronDown, ChevronRight, Target, TriangleAlert } from 'lucide-react';
 
 import { getMove } from '@/data';
 import type { ResolvedMove } from '@/types';
@@ -31,6 +21,8 @@ import { parseStepNo } from '@/lib/slug';
 import { buildMoveFigureLabel } from '@/lib/figureLabel';
 import { useDocumentMeta } from '@/lib/seo';
 import { SITE_NAME } from '@/lib/constants';
+import { artTheme } from '@/lib/artTheme';
+import { useTraining } from '@/hooks/TrainingProvider';
 
 import { FigureSlot } from '@/components/ui/FigureSlot';
 import { DifficultyBadge } from '@/components/ui/DifficultyBadge';
@@ -40,6 +32,10 @@ import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { PrevNextNav } from '@/components/ui/PrevNextNav';
 import { RiskNote } from '@/components/ui/RiskNote';
 import { SafetyNotice } from '@/components/ui/SafetyNotice';
+import { RichText, HighlightLegend } from '@/components/ui/RichText';
+import { SemanticNote } from '@/components/ui/Card';
+import { StepProgressCard } from '@/components/ui/StepProgressCard';
+import { Button } from '@/components/ui/Button';
 import {
   NotFoundContent,
   NOT_FOUND_DESCRIPTION,
@@ -47,40 +43,29 @@ import {
 } from '@/pages/NotFound';
 
 /* ---------------------------------------------------------------------------
- * 页内锚点（快速跳到「步骤 / 要领 / 错误 / 进阶标准」）
+ * 页内锚点
  * ------------------------------------------------------------------------ */
 
-/** 页内锚点定义（`id` 必须在下方区块真实存在） */
 const PAGE_ANCHORS: readonly { id: string; label: string }[] = [
   { id: 'steps', label: '步骤' },
   { id: 'key-points', label: '要领' },
   { id: 'mistakes', label: '错误' },
-  { id: 'progression', label: '进阶标准' },
+  { id: 'training-goal', label: '目标' },
+  { id: 'regression', label: '降阶' },
 ];
 
 /* ---------------------------------------------------------------------------
- * 折叠面板（可访问实现）
+ * 折叠面板
  * ------------------------------------------------------------------------ */
 
-/** `CollapsibleSection` 的 props */
 interface CollapsibleSectionProps {
-  /** 锚点 id（供页内跳转与 `aria-controls` 目标） */
   id: string;
-  /** 对应数据字段名（写入 `data-field`，便于核对字段渲染） */
   field: string;
-  /** 面板标题 */
   title: string;
-  /** 是否默认展开 */
   defaultOpen?: boolean;
-  /** 面板内容 */
   children: ReactNode;
 }
 
-/**
- * 可折叠区块 —— 采用**标准 disclosure 模式**：
- * 标题为 `<h2>`，内部 `<button>` 控制展开；面板 `role="region"` + `aria-labelledby`，
- * 收起时用 `hidden` 属性（元素仍存在，`aria-controls` 始终可解析）。
- */
 function CollapsibleSection({
   id,
   field,
@@ -96,7 +81,7 @@ function CollapsibleSection({
     <section
       id={id}
       data-field={field}
-      className="scroll-mt-20 rounded-md border border-border bg-surface"
+      className="scroll-mt-24 overflow-hidden rounded-lg border border-border bg-surface shadow-card"
     >
       <h2 className="m-0">
         <button
@@ -105,15 +90,13 @@ function CollapsibleSection({
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((prev) => !prev)}
-          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-4 py-3 text-left"
+          className="flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
         >
-          <span className="text-lg font-semibold leading-snug text-text">
-            {title}
-          </span>
+          <span className="text-base font-bold leading-snug text-text">{title}</span>
           <ChevronDown
             aria-hidden="true"
             className={[
-              'h-5 w-5 shrink-0 text-muted transition-transform',
+              'h-5 w-5 shrink-0 text-muted transition-transform duration-200',
               open ? 'rotate-180' : '',
             ]
               .filter(Boolean)
@@ -136,27 +119,12 @@ function CollapsibleSection({
 }
 
 /* ---------------------------------------------------------------------------
- * 常见错误：把「错误表现」与「纠正方法」视觉分离
+ * 常见错误
  * ------------------------------------------------------------------------ */
 
-/** 拆分结果 */
-interface ParsedMistake {
-  /** 错误表现 */
-  mistake: string;
-  /** 纠正方法（无分隔符时为 null） */
-  fix: string | null;
-}
-
-/** 错误条目分隔符（数据格式固定为「错误表现 —— 纠正方法」，见 §9.5） */
 const MISTAKE_SEPARATOR = '——';
 
-/**
- * 把一条「错误表现 —— 纠正方法」拆成两段（纯函数）。
- *
- * @param item 原始条目
- * @returns `{ mistake, fix }`；无分隔符时 `fix` 为 `null`
- */
-function splitMistake(item: string): ParsedMistake {
+function splitMistake(item: string): { mistake: string; fix: string | null } {
   const parts = item.split(MISTAKE_SEPARATOR);
   if (parts.length >= 2) {
     return {
@@ -167,30 +135,32 @@ function splitMistake(item: string): ParsedMistake {
   return { mistake: item.trim(), fix: null };
 }
 
-/** 常见错误列表：每条分「错误表现（danger 标签）/ 纠正方法（success 标签）」两行 */
+/** 常见错误：错误表现（红块）/ 纠正方法（绿块）分块呈现，双击通道（标签文字 + 颜色） */
 function MistakeList({ items }: { items: string[] }) {
   return (
     <ul className="m-0 flex list-none flex-col gap-3 p-0">
       {items.map((item, index) => {
         const { mistake, fix } = splitMistake(item);
         return (
-          <li key={index} className="flex items-start gap-2.5">
-            <TriangleAlert
-              aria-hidden="true"
-              className="mt-0.5 h-5 w-5 shrink-0 text-danger"
-            />
-            <div className="min-w-0">
-              <p className="text-base leading-[1.7] text-text">
-                <span className="font-semibold text-danger">错误表现：</span>
-                {mistake}
-              </p>
-              {fix ? (
-                <p className="mt-1 text-base leading-[1.7] text-text">
-                  <span className="font-semibold text-success">纠正方法：</span>
-                  {fix}
-                </p>
-              ) : null}
-            </div>
+          <li key={index} className="flex flex-col gap-2">
+            <SemanticNote
+              tone="risk"
+              title="错误表现"
+              icon={
+                <TriangleAlert aria-hidden="true" className="h-4 w-4 text-danger" />
+              }
+            >
+              <RichText className="text-base leading-[1.7] text-text" text={mistake} />
+            </SemanticNote>
+            {fix ? (
+              <SemanticNote
+                tone="good"
+                title="纠正方法"
+                icon={<Target aria-hidden="true" className="h-4 w-4 text-success" />}
+              >
+                <RichText className="text-base leading-[1.7] text-text" text={fix} />
+              </SemanticNote>
+            ) : null}
           </li>
         );
       })}
@@ -199,28 +169,17 @@ function MistakeList({ items }: { items: string[] }) {
 }
 
 /* ---------------------------------------------------------------------------
- * 训练目标：三档并排（初级 → 中级 → 升阶）
+ * 训练目标三档
  * ------------------------------------------------------------------------ */
 
-/** 单档训练目标 */
 interface GoalTier {
-  /** 档位标签（如「初级」「中级」「升阶」） */
   label: string;
-  /** 档位数值（如「2 组 × 25 次」「保持 1 分钟」） */
   value: string;
 }
 
-/** 分隔符（数据格式固定为「初级 A → 中级 B → 升阶 C」，见 §9.5） */
 const GOAL_TIER_SEPARATOR = '→';
 
-/**
- * 把 `trainingGoal` 拆成三档（纯函数）。
- * 形如 `初级 1 组 × 10 次 → 中级 2 组 × 25 次 → 升阶 3 组 × 50 次`
- * → `[{初级, 1 组 × 10 次}, {中级, 2 组 × 25 次}, {升阶, 3 组 × 50 次}]`。
- * 无法拆出 ≥2 档时返回空数组（调用方回退为整段文本）。
- *
- * @param goal 训练目标原文
- */
+/** 把 `trainingGoal` 拆成三档（纯函数） */
 function parseGoalTiers(goal: string): GoalTier[] {
   const segments = goal
     .split(GOAL_TIER_SEPARATOR)
@@ -230,44 +189,62 @@ function parseGoalTiers(goal: string): GoalTier[] {
 
   return segments.map((segment) => {
     const matched = segment.match(/^(\S+)\s+(.*)$/);
-    if (matched) {
-      return { label: matched[1].trim(), value: matched[2].trim() };
-    }
+    if (matched) return { label: matched[1].trim(), value: matched[2].trim() };
     return { label: '', value: segment };
   });
 }
 
-/** 训练目标：三档并排展示，一眼可辨三档差异 */
+/**
+ * 训练目标三档。
+ *
+ * 这三档**同时就是训练量阶梯**（初级 → 中级 → 升阶），
+ * 计划引擎的 `volumeLadder` 就是从这里派生的 —— 所以这里用递进视觉，
+ * 而不是三个等权重的格子。
+ */
 function TrainingGoalTiers({ goal }: { goal: string }) {
   const tiers = parseGoalTiers(goal);
 
   if (tiers.length === 0) {
-    // 兜底：格式异常时整段展示，不丢内容
-    return <p className="text-base leading-[1.8] text-text">{goal}</p>;
+    return <RichText className="text-base leading-[1.8] text-text" text={goal} />;
   }
 
+  const currentTier = 1; // 第 2 档（中级）为「计划引擎默认使用的档位」
+
   return (
-    <ol className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-3">
+    <ol className="m-0 grid list-none grid-cols-1 gap-2.5 p-0">
       {tiers.map((tier, index) => {
-        const isLast = index === tiers.length - 1;
+        const isCurrent = index === currentTier;
         return (
           <li
             key={`${tier.label}-${index}`}
             className={[
-              'rounded-md border bg-surface2 p-3',
-              // 末档（升阶 = 目标档）用 accent 描边强化，文字标签仍为主通道；
-              // 描边不透明度 80% 以同时满足浅 / 深两主题下非文字对比度 ≥3:1（T13 修复）。
-              isLast ? 'border-accent/80' : 'border-border',
-            ]
-              .filter(Boolean)
-              .join(' ')}
+              'flex items-center gap-3 rounded-md border p-3',
+              isCurrent ? 'border-accent/40 bg-accent-soft' : 'border-border bg-surface2',
+            ].join(' ')}
           >
-            {tier.label ? (
-              <p className="text-xs font-medium text-muted">{tier.label}</p>
-            ) : null}
-            <p className="mt-1 text-sm font-semibold leading-snug text-text">
-              {tier.value}
-            </p>
+            <span
+              aria-hidden="true"
+              className={[
+                'tnum flex h-7 w-7 shrink-0 items-center justify-center rounded-pill text-xs font-bold',
+                isCurrent ? 'bg-accent text-bg' : 'bg-border text-muted',
+              ].join(' ')}
+            >
+              {index + 1}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="text-xs font-bold text-muted">{tier.label}</span>
+                {isCurrent ? (
+                  <span className="rounded-pill bg-accent px-1.5 py-px text-[10px] font-bold text-bg">
+                    当前档位
+                  </span>
+                ) : null}
+              </span>
+              <RichText
+                className="mt-0.5 block text-base font-semibold leading-snug text-text"
+                text={tier.value}
+              />
+            </span>
           </li>
         );
       })}
@@ -276,95 +253,120 @@ function TrainingGoalTiers({ goal }: { goal: string }) {
 }
 
 /* ---------------------------------------------------------------------------
- * 主体内容（式存在时渲染）
+ * 主体
  * ------------------------------------------------------------------------ */
 
-/** `MoveArticle` 的 props */
-interface MoveArticleProps {
-  move: ResolvedMove;
-}
-
-/** 十式详情主体：渲染全部 13 个内容字段 + 图位 + 链路 + 安全入口 */
-function MoveArticle({ move }: MoveArticleProps) {
+function MoveArticle({ move }: { move: ResolvedMove }) {
   const { stepNo } = move;
   const art = move.artRef;
+  const theme = artTheme(art.slug);
   const figureLabel = buildMoveFigureLabel(move);
 
+  const training = useTraining();
+  const goals = training.goalsOf(art.slug, stepNo);
+  const checks = training.store.skills[art.slug].checks[stepNo];
+  const completed = training.store.skills[art.slug].completedSteps.includes(stepNo);
+  const checkedCount = checks?.slice(0, goals.length).filter(Boolean).length ?? 0;
+  const allChecked = goals.length > 0 && checkedCount === goals.length;
+
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
-      {/* 面包屑：首页 / 六艺 / 艺 / 式 */}
+    <main className="mx-auto w-full max-w-3xl px-4 pb-nav-cta pt-5 sm:px-6">
       <Breadcrumb
         items={[
           { label: '首页', href: '/' },
           { label: '六艺', href: '/arts' },
           { label: art.nameZh, href: `/arts/${art.slug}` },
-          { label: `第 ${stepNo} 式 ${move.nameZh}` },
+          { label: `第 ${stepNo} 式` },
         ]}
       />
 
-      {/* 标题区：所属艺 · 中文名 · 英文名 · 难度 · 序号 */}
-      <header className="mt-4">
-        <p data-field="artRef" className="text-xs font-medium text-muted">
-          所属艺：{art.nameZh}（<span lang="en">{art.nameEn}</span>）
-        </p>
+      {/* 标题区 */}
+      <header className="mt-3">
+        <div className="flex items-center gap-2">
+          <span
+            className={[
+              'tnum flex h-8 w-8 shrink-0 items-center justify-center rounded-md font-mono text-sm font-bold',
+              theme.solid,
+            ].join(' ')}
+          >
+            {stepNo}
+          </span>
+          <p data-field="artRef" className="min-w-0 truncate text-sm font-medium text-muted">
+            {art.nameZh} · 第 {stepNo} 式 / 共 10 式
+          </p>
+        </div>
 
         <h1
           data-field="nameZh"
-          className="mt-1 text-2xl font-bold leading-tight text-text sm:text-3xl"
+          className="mt-2 text-[26px] font-extrabold leading-tight tracking-tight text-text sm:text-3xl"
         >
           {move.nameZh}
         </h1>
 
-        <p
-          data-field="nameEn"
-          lang="en"
-          className="mt-1 font-mono text-sm leading-snug text-muted"
-        >
-          {move.nameEn}
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span data-field="difficulty">
-            <DifficultyBadge difficulty={move.difficulty} />
-          </span>
-          <span data-field="stepNo" className="font-mono text-sm text-muted">
-            第 {stepNo} 式 / 共 10 式
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <DifficultyBadge difficulty={move.difficulty} />
+          <span
+            data-field="nameEn"
+            lang="en"
+            className="font-mono text-xs text-subtle"
+          >
+            {move.nameEn}
           </span>
         </div>
       </header>
 
-      {/* 主图位（ratio 3/2，单一图位，桌面限宽居中） */}
+      {/* 紧凑图位条（v2：替代 v1 的 250px 高空灰框） */}
       <div className="mt-4">
         <FigureSlot
+          variant="strip"
           ratio="3/2"
           label={figureLabel}
           badge={`第 ${stepNo} 式`}
-          className="mx-auto max-w-[720px]"
         />
       </div>
 
-      {/* 动作描述 */}
-      <p
-        data-field="description"
-        className="mt-4 text-base leading-[1.8] text-text"
-      >
-        {move.description}
-      </p>
+      {/* 动作描述（富文本高亮） */}
+      <section aria-labelledby="description-heading" className="mt-4">
+        <h2 id="description-heading" className="sr-only">
+          动作描述
+        </h2>
+        <RichText
+          className="text-base leading-[1.8] text-text"
+          text={move.description}
+        />
+        <HighlightLegend className="mt-3" />
+      </section>
 
-      {/* 风险提示：仅高风险式（桥全系 / 倒立撑全系 / 各艺第 8–10 式）渲染 */}
-      {move.riskNote ? <RiskNote className="mt-4" text={move.riskNote} /> : null}
+      {/* 风险提示 */}
+      {move.riskNote ? (
+        <RiskNote className="mt-4" text={move.riskNote} />
+      ) : null}
 
-      {/* 页内锚点条（吸顶）：快速跳到 步骤 / 要领 / 错误 / 进阶标准 */}
+      {/* 进阶条件打卡（核心交互，前置到细节之前） */}
+      <StepProgressCard
+        className="mt-6"
+        artName={art.nameZh}
+        stepNo={stepNo}
+        goals={goals}
+        checks={checks}
+        completed={completed}
+        nextStepName={move.nextStep?.nameZh ?? null}
+        onToggle={(index) => training.toggleStepCheck(art.slug, stepNo, index)}
+        onComplete={() => training.completeStep(art.slug, stepNo)}
+        onUndo={() => training.undoStep(art.slug, stepNo)}
+      />
+
+      {/* 页内锚点条（吸顶） */}
       <nav
         aria-label="页内快速跳转"
-        className="sticky top-0 z-10 -mx-4 mt-4 border-b border-border bg-bg/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6"
+        className="sticky top-0 z-10 -mx-4 mt-6 border-b border-border bg-bg/95 px-4 backdrop-blur-md sm:-mx-6 sm:px-6"
       >
-        <ul className="m-0 flex list-none flex-wrap items-center gap-x-4 gap-y-1 p-0">
+        <ul className="m-0 flex list-none flex-nowrap items-center gap-x-1 overflow-x-auto p-0 scroll-x">
           {PAGE_ANCHORS.map((anchor) => (
-            <li key={anchor.id}>
+            <li key={anchor.id} className="shrink-0">
               <a
                 href={`#${anchor.id}`}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center text-sm font-medium text-accent hover:underline"
+                className="inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-muted transition-colors hover:text-accent"
               >
                 {anchor.label}
               </a>
@@ -373,14 +375,15 @@ function MoveArticle({ move }: MoveArticleProps) {
         </ul>
       </nav>
 
-      {/* 分块内容（顺序 = PRD §7.4 阅读顺序） */}
-      <div className="mt-4 flex flex-col gap-4">
-        {/* 分解步骤（默认展开，置前） */}
+      <div className="mt-4 flex flex-col gap-3.5">
         <CollapsibleSection id="steps" field="steps" title="分解步骤" defaultOpen>
-          <StepList steps={move.steps} />
+          <StepList
+            steps={move.steps}
+            hueSoftClass={theme.soft}
+            hueTextClass={theme.text}
+          />
         </CollapsibleSection>
 
-        {/* 要领要点（默认展开） */}
         <CollapsibleSection
           id="key-points"
           field="keyPoints"
@@ -390,7 +393,6 @@ function MoveArticle({ move }: MoveArticleProps) {
           <InfoList variant="success" items={move.keyPoints} />
         </CollapsibleSection>
 
-        {/* 常见错误（默认展开） */}
         <CollapsibleSection
           id="mistakes"
           field="commonMistakes"
@@ -400,42 +402,45 @@ function MoveArticle({ move }: MoveArticleProps) {
           <MistakeList items={move.commonMistakes} />
         </CollapsibleSection>
 
-        {/* 进阶标准（默认展开） */}
         <CollapsibleSection
           id="progression"
           field="progressionStandard"
-          title="进阶标准"
-          defaultOpen
+          title="进阶标准原文"
         >
-          <p className="rounded-md border-l-4 border-l-accent bg-surface2 p-3 text-base leading-[1.8] text-text">
-            {move.progressionStandard}
-          </p>
+          <SemanticNote tone="info">
+            <RichText
+              className="text-base leading-[1.8] text-text"
+              text={move.progressionStandard}
+            />
+          </SemanticNote>
         </CollapsibleSection>
 
-        {/* 训练目标（三档并排，常驻展开） */}
+        {/* 训练目标（常驻展开） */}
         <section
           id="training-goal"
           data-field="trainingGoal"
-          className="rounded-md border border-border bg-surface p-4"
+          className="scroll-mt-24 rounded-lg border border-border bg-surface p-4 shadow-card"
         >
-          <h2 className="mb-3 text-lg font-semibold leading-snug text-text">
-            训练目标
-          </h2>
+          <h2 className="mb-1 text-base font-bold leading-snug text-text">训练目标</h2>
+          <p className="mb-3 text-sm leading-relaxed text-muted">
+            同一式内的训练量三档 —— 先把量练满，再考虑进入下一式。
+          </p>
           <TrainingGoalTiers goal={move.trainingGoal} />
         </section>
 
-        {/* 降阶方案（默认折叠） */}
-        <CollapsibleSection id="regression" field="regression" title="降阶方案">
-          <p className="text-base leading-[1.8] text-text">{move.regression}</p>
+        <CollapsibleSection id="regression" field="regression" title="太难了怎么办（降阶方案）">
+          <RichText
+            className="text-base leading-[1.8] text-text"
+            text={move.regression}
+          />
         </CollapsibleSection>
 
-        {/* 主要发力肌群（默认折叠） */}
         <CollapsibleSection id="muscles" field="muscles" title="主要发力肌群">
           <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
             {move.muscles.map((muscle) => (
               <li
                 key={muscle}
-                className="rounded border border-border bg-surface2 px-2.5 py-1 text-sm text-text"
+                className="rounded-pill border border-border bg-surface2 px-3 py-1 text-sm text-text"
               >
                 {muscle}
               </li>
@@ -444,13 +449,11 @@ function MoveArticle({ move }: MoveArticleProps) {
         </CollapsibleSection>
       </div>
 
-      {/* 安全入口：一键跳转训练原则（PRD P0-7） */}
       <SafetyNotice
         className="mt-6"
         text="训练前请充分热身、循序渐进、量力而行；出现疼痛立即停止。有伤病或身体不适者请先咨询医生。"
       />
 
-      {/* 上一式 / 下一式（正确处理 null 边界） */}
       <div className="mt-6">
         <PrevNextNav
           prev={
@@ -465,6 +468,42 @@ function MoveArticle({ move }: MoveArticleProps) {
           }
         />
       </div>
+
+      {/* 吸底常驻进度条 CTA */}
+      <div className="pb-safe fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] z-20 border-t border-border bg-bg/95 shadow-lift backdrop-blur-md md:bottom-0">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs text-muted">
+              {art.nameZh} · 第 {stepNo} 式 {move.nameZh}
+            </p>
+            <p
+              className={[
+                'tnum text-sm font-bold',
+                allChecked || completed ? 'text-success' : 'text-text',
+              ].join(' ')}
+            >
+              {completed
+                ? '本式已完成'
+                : `进阶条件 ${checkedCount}/${goals.length}`}
+            </p>
+          </div>
+
+          {completed && move.nextStep ? (
+            <Button to={move.nextStep.href}>
+              下一式
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          ) : (
+            // 原生锚点：跳到下方的打卡卡（不改变路由）
+            <a
+              href="#progression-check"
+              className="inline-flex min-h-[46px] items-center rounded-md border border-border-strong bg-surface px-4 text-sm font-semibold text-text"
+            >
+              去打卡
+            </a>
+          )}
+        </div>
+      </div>
     </main>
   );
 }
@@ -473,12 +512,6 @@ function MoveArticle({ move }: MoveArticleProps) {
  * 路由组件
  * ------------------------------------------------------------------------ */
 
-/**
- * 十式详情页（路由组件）。
- *
- * - 安全解析 URL 参数（`stepNo` 为字符串，经 `parseStepNo` 校验 1–10）；
- * - 式不存在（非法 artSlug / stepNo 越界）→ 渲染与 404 一致的内容。
- */
 export function MoveDetail() {
   const { artSlug, stepNo: rawStepNo } = useParams<{
     artSlug: string;
@@ -491,7 +524,6 @@ export function MoveDetail() {
       ? getMove(artSlug, parsedStepNo)
       : undefined;
 
-  // 无条件调用（hooks 规则）；非法参数时写入与 404 页一致的 meta。
   useDocumentMeta(
     move
       ? `${move.nameZh} · 第 ${move.stepNo} 式 · ${move.artRef.nameZh} · ${SITE_NAME}`
@@ -499,7 +531,6 @@ export function MoveDetail() {
     move ? move.description : NOT_FOUND_DESCRIPTION,
   );
 
-  // 非法参数：渲染与 404 完全一致的内容（不白屏、不抛错）
   if (!move) {
     return (
       <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">

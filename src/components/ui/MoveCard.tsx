@@ -1,16 +1,17 @@
 /**
- * MoveCard —— 招式卡片。
+ * MoveCard —— 招式卡片（v2 重做）。
  *
- * 结构：`FigureSlot`(1/1 缩略图位，角标为「第 N 式」) + 中英文名 + 难度徽章；
- * **整卡可点击**，使用 `<Link>` 做站内跳转（不整页刷新）。
+ * v1 的结构是「80px 见方的空图位 + 名字 + 难度徽章」，六艺详情页里十张排下来，
+ * 用户看到的是十块灰色方块。
  *
- * 数据由 props 传入，本组件不含业务逻辑、不读取 `@/data`。
+ * v2 改为**进度时间线卡**：左侧是状态标记（✓ 已完成 / ● 进行中 / ○ 未开始），
+ * 中间是式名与难度，右侧是当前式指示。整卡仍是 `<Link>`，触控目标 ≥56px。
  */
 import { Link } from 'react-router-dom';
+import { Check, Circle, Dot } from 'lucide-react';
 import type { MoveDifficulty } from '@/types';
-import { FigureSlot } from '@/components/ui/FigureSlot';
 import { DifficultyBadge } from '@/components/ui/DifficultyBadge';
-import { buildMoveFigureLabel } from '@/lib/figureLabel';
+import type { ProgressState } from '@/lib/artTheme';
 
 /** `MoveCard` 的 props */
 export interface MoveCardProps {
@@ -25,18 +26,52 @@ export interface MoveCardProps {
   /** 详情页路径，如 `/arts/pushups/5` */
   href: string;
   /**
-   * 动作描述：用于生成图位无障碍标签（须描述动作本身，非文件名 / 序号 —— PRD P0-18）。
-   * 省略时图位标签回退为该式中文名（仍描述动作，不再出现「动作示意」等噪音）。
+   * 动作描述：用于生成图位无障碍标签（须描述动作本身，非文件名 / 序号）。
+   * 省略时回退为该式中文名。
    */
   description?: string;
+  /** 进度状态（v2 新增）：决定左侧标记与整卡权重 */
+  state?: ProgressState;
+  /** 色相类（与所属艺一致，只用于序号与状态点） */
+  hueClass?: string;
+  /** 左侧状态点的色相（用于「进行中」的实心点） */
+  hueSolidClass?: string;
   className?: string;
+}
+
+/** 状态 → 标记元素 + 整卡样式 */
+function stateStyle(state: ProgressState) {
+  switch (state) {
+    case 'done':
+      return {
+        marker: <Check aria-hidden="true" className="h-4 w-4 text-success" strokeWidth={3} />,
+        wrap: 'border-border bg-surface',
+        title: 'text-muted',
+        label: '已完成',
+      };
+    case 'current':
+      return {
+        marker: <Dot aria-hidden="true" className="h-6 w-6 text-accent" strokeWidth={6} />,
+        wrap: 'border-accent/45 bg-accent-soft shadow-card',
+        title: 'text-text',
+        label: '进行中',
+      };
+    default:
+      return {
+        marker: <Circle aria-hidden="true" className="h-4 w-4 text-subtle" strokeWidth={2} />,
+        wrap: 'border-border bg-surface',
+        title: 'text-text',
+        label: '未开始',
+      };
+  }
 }
 
 /**
  * 招式卡片（整卡可点击）。
  *
  * @example
- * <MoveCard stepNo={5} nameZh="标准俯卧撑" nameEn="Full Push-ups" difficulty="中级" description="俯卧撑体系的基准动作。" href="/arts/pushups/5" />
+ * <MoveCard stepNo={5} nameZh="标准俯卧撑" nameEn="Full Push-ups" difficulty="中级"
+ *           description="俯卧撑体系的基准动作。" href="/arts/pushups/5" state="current" />
  */
 export function MoveCard({
   stepNo,
@@ -45,44 +80,67 @@ export function MoveCard({
   difficulty,
   href,
   description = '',
+  state = 'idle',
+  hueClass = 'text-muted',
+  hueSolidClass = 'bg-accent',
   className = '',
 }: MoveCardProps) {
-  // 图位无障碍标签：走真源函数 `buildMoveFigureLabel` 统一生成，描述动作本身（PRD P0-18）。
-  // 未提供描述时退化为招式名，绝不出现「动作示意」等无信息噪音。
-  const figureLabel = description.trim()
-    ? buildMoveFigureLabel({ nameZh, description })
-    : nameZh;
+  const { marker, wrap, title, label } = stateStyle(state);
+  const isCurrent = state === 'current';
 
   return (
     <Link
       to={href}
+      aria-label={`第 ${stepNo} 式 ${nameZh}（${label}）${description ? `：${description}` : ''}`}
       className={[
-        'flex items-center gap-3 rounded-md border border-border bg-surface p-3',
-        'transition-colors hover:border-accent',
+        'flex min-h-[56px] items-center gap-3.5 rounded-lg border p-3.5',
+        'transition-[border-color,box-shadow,transform] duration-200 ease-smooth',
+        'hover:border-border-strong hover:shadow-card-hover active:scale-[0.99]',
+        wrap,
         className,
       ]
         .filter(Boolean)
         .join(' ')}
     >
-      {/* 1/1 缩略图位：角标承载序号 */}
-      <div className="w-20 shrink-0">
-        <FigureSlot
-          ratio="1/1"
-          label={figureLabel}
-          badge={`第 ${stepNo} 式`}
-          note="待补充"
-        />
-      </div>
+      {/* 序号 + 状态点：序号是主通道，状态点用形状（✓ / ● / ○）而非仅颜色 */}
+      <span className="flex w-7 shrink-0 flex-col items-center gap-1">
+        <span
+          className={[
+            'tnum font-mono text-base font-bold leading-none',
+            isCurrent ? 'text-accent' : state === 'done' ? 'text-muted' : 'text-text',
+          ].join(' ')}
+        >
+          {stepNo}
+        </span>
+        <span aria-hidden="true">{marker}</span>
+      </span>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <h3 className="truncate text-base font-semibold leading-snug text-text">
-          {nameZh}
-        </h3>
-        <p className="truncate font-mono text-xs text-muted">{nameEn}</p>
-        <div>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span
+            className={[
+              'truncate text-base leading-snug',
+              isCurrent ? 'font-bold' : 'font-semibold',
+              title,
+            ].join(' ')}
+          >
+            {nameZh}
+          </span>
           <DifficultyBadge difficulty={difficulty} />
-        </div>
-      </div>
+        </span>
+        <span
+          className={['mt-0.5 block truncate font-mono text-[11px] text-subtle', hueClass].join(' ')}
+        >
+          {nameEn}
+        </span>
+      </span>
+
+      {isCurrent ? (
+        <span
+          aria-hidden="true"
+          className={['h-8 w-1 shrink-0 rounded-pill', hueSolidClass].join(' ')}
+        />
+      ) : null}
     </Link>
   );
 }

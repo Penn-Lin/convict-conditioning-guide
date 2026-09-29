@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>囚徒健身 · 界面改版设计稿 v2</title>
+<style>
+  /* ==========================================================================
+     设计 token（v2 提案）—— 与 src/index.css 一一对应，落地时直接搬过去
+     ========================================================================== */
+  :root{
+    --bg:#FFFFFF;
+    --page:#F5F7FA;
+
+    --surface:#FFFFFF;
+    --surface-2:#F3F5F8;
+    --surface-3:#E9EDF3;
+
+    --border:#E4E7EC;
+    --border-strong:#CBD2DC;
+
+    --text:#111418;
+    --text-2:#3D454E;
+    --muted:#6B7480;
+
+    --accent:#C2410C;
+    --accent-strong:#9A3412;
+    --accent-tint:#FDF1EA;
+
+    --success:#15803D;
+    --success-tint:#ECFDF3;
+
+    --danger:#B91C1C;
+    --danger-tint:#FEF3F2;
+
+    --info:#1D4ED8;
+    --info-tint:#EFF4FF;
+
+    --lv-1:#15803D; --lv-2:#1D4ED8; --lv-3:#B45309; --lv-4:#C2410C; --lv-5:#B91C1C;
+
+    --art-1:#C2410C; --art-1-tint:#FDF1EA;
+    --art-2:#15803D; --art-2-tint:#ECFDF3;
+    --art-3:#1D4ED8; --art-3-tint:#EFF4FF;
+    --art-4:#B45309; --art-4-tint:#FEF6E7;
+    --art-5:#0F766E; --art-5-tint:#EAFBF7;
+    --art-6:#6D28D9; --art-6-tint:#F4F1FE;
+
+    --r-card:16px; --r-inner:12px; --r-pill:999px;
+    --shadow-card:0 1px 2px rgba(16,24,40,.05), 0 10px 24px -18px rgba(16,24,40,.35);
+    --shadow-pop:0 2px 6px rgba(16,24,40,.06), 0 18px 40px -24px rgba(16,24,40,.45);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;background:var(--page);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",system-ui,sans-serif;
+    font-size:16px;line-height:1.7;
+  }
+  .board{max-width:1320px;margin:0 auto;padding:32px 20px 80px}
+  .board-head{max-width:760px;margin-bottom:8px}
+  .kicker{font-size:12px;letter-spacing:.14em;color:var(--accent);font-weight:700}
+  .board h1{font-size:28px;font-weight:800;letter-spacing:-.02em;margin:8px 0 10px;line-height:1.25}
+  .board .lede{color:var(--text-2);font-size:15px;margin:0}
+
+  /* 高亮规则图例 */
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 30px}
+  .legend div{background:#fff;border:1px solid var(--border);border-radius:var(--r-inner);
+    padding:8px 12px;font-size:13px;display:flex;align-items:center;gap:8px}
+  .legend b{font-weight:600}
+
+  .frames{display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start}
+  .frame-wrap{width:390px;max-width:100%}
+  .frame-label{font-size:13px;font-weight:600;color:var(--text-2);margin:0 0 10px 4px;display:flex;align-items:center;gap:8px}
+  .frame-label span{font-size:11px;font-weight:700;color:#fff;background:var(--text);border-radius:var(--r-pill);padding:2px 8px}
+  .phone{
+    width:100%;height:844px;background:var(--bg);border:1px solid var(--border-strong);
+    border-radius:38px;box-shadow:var(--shadow-pop);overflow:hidden;position:relative;
+    display:flex;flex-direction:column;
+  }
+  .statusbar{height:30px;flex:none;display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px;font-size:11px;font-weight:600;color:var(--text-2)}
+  .viewport{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+  .viewport::-webkit-scrollbar{width:0}
+
+  /* 顶栏 */
+  .appbar{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:12px}
+  .appbar .brand{font-weight:800;letter-spacing:-.02em;font-size:16px;flex:1;min-width:0;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+  .appbar .sub{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+  .iconbtn{width:36px;height:36px;flex:none;border-radius:var(--r-inner);border:1px solid var(--border);
+    background:#fff;display:grid;place-items:center;font-size:14px;color:var(--text-2)}
+
+  .pad{padding:16px 16px 96px}
+  .stack{display:flex;flex-direction:column;gap:14px}
+
+  /* 进度环 */
+  .ring{--p:30;width:64px;height:64px;flex:none;border-radius:50%;
+    background:conic-gradient(var(--accent) calc(var(--p)*1%), var(--surface-3) 0);
+    display:grid;place-items:center;position:relative}
+  .ring::after{content:"";position:absolute;inset:6px;background:#fff;border-radius:50%}
+  .ring b{position:relative;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .ring b i{font-style:normal;font-size:10px;color:var(--muted);font-weight:600}
+
+  /* 卡片族 */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);padding:16px;box-shadow:var(--shadow-card)}
+  .card--flat{box-shadow:none}
+  .card--hero{border-color:#F0D8C9;background:linear-gradient(180deg,#FFF9F5 0%,#FFFFFF 62%)}
+  .card--plan{border-color:#CFE9DA;background:linear-gradient(180deg,#F4FCF7 0%,#FFFFFF 62%)}
+  .card-head{display:flex;align-items:flex-start;gap:12px}
+  .card-h{font-size:15px;font-weight:700;letter-spacing:-.01em;margin:0}
+
+  /* 标题系统 */
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--muted)}
+  .h1{font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1.22;margin:6px 0 0}
+  .h2{font-size:19px;font-weight:700;letter-spacing:-.02em;line-height:1.3;margin:0}
+  .h3{font-size:15px;font-weight:600;line-height:1.35;margin:0}
+  .body{font-size:16px;line-height:1.7;color:var(--text-2);margin:0}
+  .body--tight{font-size:15px;line-height:1.65}
+  .cap{font-size:12px;color:var(--muted);line-height:1.5}
+
+  /* 徽章 */
+  .badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);
+    background:#fff;border-radius:var(--r-pill);padding:3px 10px;font-size:12px;font-weight:600}
+  .badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .b-lv3{color:var(--lv-3);border-color:var(--lv-3)}
+  .b-lv2{color:var(--lv-2);border-color:var(--lv-2)}
+  .b-solid{background:var(--accent);border-color:var(--accent);color:#fff}
+  .b-soft{background:var(--accent-tint);border-color:#F0D8C9;color:var(--accent)}
+  .b-done{background:var(--success-tint);border-color:#BFE5CC;color:var(--success)}
+  .b-todo{background:var(--surface-2);border-color:var(--border);color:var(--muted)}
+
+  /* 进度条 */
+  .bar{height:8px;border-radius:var(--r-pill);background:var(--surface-3);overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--accent);border-radius:var(--r-pill)}
+  .bar--green > i{background:var(--success)}
+
+  /* 按钮 */
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;
+    border-radius:14px;font-size:15px;font-weight:700;letter-spacing:-.01em;border:1px solid transparent;cursor:pointer;font-family:inherit}
+  .btn--primary{background:linear-gradient(180deg,#D4500F,#B33A0A);color:#fff;
+    box-shadow:0 1px 2px rgba(122,45,10,.28), 0 10px 22px -12px rgba(122,45,10,.6)}
+  .btn--primary[disabled]{background:var(--surface-3);color:var(--muted);box-shadow:none;cursor:not-allowed}
+  .btn--ghost{background:#fff;border-color:var(--border-strong);color:var(--text)}
+  .btn--block{width:100%}
+  .btn-note{font-size:12px;color:var(--muted);text-align:center;margin:8px 0 0}
+
+  /* 进阶条件清单 */
+  .checks{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+  .check{display:flex;align-items:flex-start;gap:12px;padding:12px 10px;border-radius:var(--r-inner);cursor:pointer}
+  .check + .check{border-top:1px solid var(--border)}
+  .check:active{background:var(--surface-2)}
+  .box{width:24px;height:24px;flex:none;border-radius:8px;border:2px solid var(--border-strong);
+    display:grid;place-items:center;color:transparent;font-size:13px;font-weight:900;margin-top:2px;transition:.15s}
+  .check[data-on="1"] .box{background:var(--success);border-color:var(--success);color:#fff}
+  .check-txt{flex:1;min-width:0;font-size:15px;line-height:1.6;color:var(--text)}
+  .check[data-on="1"] .check-txt{color:var(--muted);text-decoration:line-through;text-decoration-color:#BFE5CC}
+
+  /* 富文本高亮 */
+  .num{font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);
+    background:var(--accent-tint);border-radius:6px;padding:1px 5px;font-size:.95em}
+  .good{font-weight:700;color:var(--success)}
+  .bad{font-weight:700;color:var(--danger)}
+  .term{font-weight:600;border-bottom:2px dotted var(--border-strong)}
+
+  /* 分块标题 */
+  .sec{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+  .sec i{width:4px;height:18px;border-radius:2px;background:var(--accent);flex:none}
+  .sec.g i{background:var(--success)}
+  .sec.r i{background:var(--danger)}
+  .sec .count{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  /* 步骤 */
+  .ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+  .ol li{display:flex;gap:12px}
+  .ol .no{width:30px;height:30px;flex:none;border-radius:10px;background:var(--surface-2);
+    display:grid;place-items:center;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+  .ol p{margin:4px 0 0;font-size:15px;line-height:1.65}
+
+  /* 语义列表 */
+  .kv{display:flex;flex-direction:column;gap:12px}
+  .kv .row{display:flex;gap:10px;border-left:3px solid var(--success);background:var(--success-tint);
+    border-radius:0 var(--r-inner) var(--r-inner) 0;padding:10px 12px}
+  .kv .row.r{border-color:var(--danger);background:var(--danger-tint)}
+  .kv .row p{margin:0;font-size:15px;line-height:1.6}
+  .kv .row .lbl{font-weight:700;font-size:14px}
+
+  /* 六艺进度网格 */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .artcard{border:1px solid var(--border);border-radius:var(--r-inner);padding:12px;background:#fff}
+  .artcard .top{display:flex;align-items:center;gap:8px}
+  .artcard .no{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;
+    font-size:11px;font-weight:800;flex:none}
+  .artcard .nm{font-size:14px;font-weight:700;letter-spacing:-.01em}
+  .artcard .meta{font-size:11px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:10px;
+    display:flex;justify-content:space-between}
+
+  /* 周排程 */
+  .week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .day{border:1px solid var(--border);border-radius:11px;padding:8px 2px;text-align:center;background:#fff}
+  .day .d{font-size:10px;font-weight:700;color:var(--muted)}
+  .day .s{margin:5px auto 3px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800}
+  .day.on .s{background:var(--success);color:#fff}
+  .day.today{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
+  .day.today .s{background:var(--accent);color:#fff}
+  .day.off .s{background:var(--surface-3);color:var(--muted)}
+  .day .t{font-size:9px;color:var(--muted);line-height:1.2}
+
+  /* 主题行 */
+  .setting{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);font-size:15px}
+  .setting:last-child{border-bottom:0}
+  .setting .v{font-size:13px;font-weight:700;color:var(--accent)}
+
+  /* 底部标签栏 */
+  .tabbar{flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border);
+    background:rgba(255,255,255,.96);backdrop-filter:blur(12px);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:600;color:var(--muted);padding:4px 0}
+  .tab .ic{width:22px;height:22px;border-radius:7px;background:var(--surface-3)}
+  .tab.on{color:var(--accent)}
+  .tab.on .ic{background:var(--accent-tint);box-shadow:inset 0 0 0 1.5px var(--accent)}
+
+  /* 吸底 CTA */
+  .stickycta{position:sticky;bottom:0;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
+    border-top:1px solid var(--border);padding:12px 16px 14px}
+
+  /* 图位（轻量化） */
+  .figslot{border:1px dashed var(--border-strong);border-radius:var(--r-inner);background:var(--surface-2);
+    display:flex;align-items:center;gap:12px;padding:12px}
+  .figslot .sq{width:38px;height:38px;flex:none;border-radius:10px;border:1px dashed var(--border-strong);
+    display:grid;place-items:center;font-size:11px;color:var(--muted)}
+  .figslot .tx{flex:1;min-width:0}
+
+  /* 安全提示条 */
+  .warn{border:1px solid var(--border);border-left:3px solid var(--danger);background:var(--danger-tint);
+    border-radius:0 var(--r-inner) var(--r-inner) 0;padding:10px 12px}
+  .warn p{margin:0;font-size:14px;line-height:1.55;color:var(--text-2)}
+  .warn b{color:var(--danger)}
+
+  .footnote{margin-top:34px;max-width:760px;font-size:13px;color:var(--muted)}
+  .footnote b{color:var(--text-2)}
+</style>
+</head>
+<body>
+<div class="board">
+  <div class="board-head">
+    <p class="kicker">设计稿 v2 · 进度驱动版</p>
+    <h1>囚徒健身 · 六艺十式 — 界面改版提案</h1>
+    <p class="lede">下方三屏均为 390×844 真实手机尺寸，可上下滚动。第二屏的「进阶条件」可点击勾选，勾满后底部按钮会解锁——那就是真机的交互手感。</p>
+  </div>
+
+  <div class="legend">
+    <div><span class="num">3 组 × 30 次</span> 计量 / 次数 → 强调色等宽</div>
+    <div><span class="good">收紧腹部</span> 要领 / 正确 → 绿色加粗</div>
+    <div><span class="bad">塌腰</span> 错误 / 风险 → 红色加粗</div>
+    <div><span class="term">肩胛稳定</span> 术语 → 点线下划线</div>
+    <div><b>色彩语义</b>：橙＝强调 / 绿＝达标 / 红＝警示 / 蓝＝补充</div>
+  </div>
+
+  <div class="frames">
+
+    <!-- =========================== 屏 1：首页 =========================== -->
+    <div class="frame-wrap">
+      <p class="frame-label"><span>01</span> 首页 · 继续训练</p>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span>5G ▮▮▮</span></div>
+        <div class="viewport">
+          <div class="appbar">
+            <div class="brand">囚徒健身</div>
+            <div class="iconbtn">☰</div>
+          </div>
+          <div class="pad stack">
+
+            <div class="card card--hero">
+              <div class="card-head">
+                <div class="ring" style="--p:30"><b>3<i>/10</i></b></div>
+                <div style="flex:1;min-width:0">
+                  <p class="eyebrow">继续训练 · 俯卧撑</p>
+                  <p class="h2" style="margin-top:4px">第 3 式 膝盖俯卧撑</p>
+                  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                    <span class="badge b-lv2"><span class="dot"></span>初级</span>
+                    <span class="badge b-soft">进阶条件 2/3</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:14px">
+                <div class="bar"><i style="width:30%"></i></div>
+              </div>
+              <button class="btn btn--primary btn--block" style="margin-top:14px">继续这一式 →</button>
+            </div>
+
+            <div class="card card--flat" style="background:var(--surface-2);border-color:var(--border)">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="badge b-todo">今日</span>
+                <p class="body--tight" style="margin:0;flex:1">俯卧撑 · 第 3 式 <span class="num">3 组 × 30 次</span></p>
+                <button class="btn btn--ghost" style="min-height:40px;padding:0 14px;font-size:13px">打卡</button>
+              </div>
+            </div>
+
+            <div>
+              <div class="sec"><i></i><p class="h3">六艺进度</p><span class="count">3 / 60</span></div>
+              <div class="grid2">
+                <div class="artcard">
+                  <div class="top">
+                    <span class="no" style="background:var(--art-1-tint);color:var(--art-1)">1</span>
+                    <span class="nm">俯卧撑</span>
+                  </div>
+                  <div class="meta"><span>进行中</span><span>3/10</span></div>
+                  <div class="bar" style="height:6px;margin-top:6px"><i style="width:30%;background:var(--art-1)"></i></div>
+                </div>
+                <div class="artcard">
+                  <div class="top">
+                    <span class="no" style="background:var(--art-2-tint);color:var(--art-2)">2</span>
+                    <span class="nm">深蹲</span>
+                  </div>
+                  <div class="meta"><span>未开始</span><span>0/10</span></div>
+                  <div class="bar" style="height:6px;margin-top:6px"><i style="width:0%"></i></div>
+                </div>
+                <div class="artcard">
+                  <div class="top">
+                    <span class="no" style="background:var(--art-3-tint);color:var(--art-3)">3</span>
+                    <span class="nm">引体向上</span>
+                  </div>
+                  <div class="meta"><span>未开始</span><span>0/10</span></div>
+                  <div class="bar" style="height:6px;margin-top:6px"><i style="width:0%"></i></div>
+                </div>
+                <div class="artcard">
+                  <div class="top">
+                    <span class="no" style="background:var(--art-4-tint);color:var(--art-4)">4</span>
+                    <span class="nm">举腿</span>
+                  </div>
+                  <div class="meta"><span>未开始</span><span>0/10</span></div>
+                  <div class="bar" style="height:6px;margin-top:6px"><i style="width:0%"></i></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="warn">
+              <p><b>训练前先热身。</b>动作中出现疼痛立即停止；有伤病请先咨询专业人士。</p>
+            </div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab on"><span class="ic"></span>首页</div>
+          <div class="tab"><span class="ic"></span>六艺</div>
+          <div class="tab"><span class="ic"></span>训练</div>
+          <div class="tab"><span class="ic"></span>我的</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================== 屏 2：十式详情（核心） ====================== -->
+    <div class="frame-wrap">
+      <p class="frame-label"><span>02</span> 十式详情 · 进阶条件打卡</p>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span>5G ▮▮▮</span></div>
+        <div class="viewport">
+          <div class="appbar">
+            <div class="iconbtn" style="width:32px;height:32px">‹</div>
+            <div class="brand" style="font-size:14px">俯卧撑 · 第 3 式</div>
+            <div class="sub" style="font-variant-numeric:tabular-nums">3/10</div>
+          </div>
+          <div class="pad" style="padding-bottom:12px;display:flex;flex-direction:column;gap:14px">
+
+            <div>
+              <p class="eyebrow">俯卧撑 PUSH-UPS</p>
+              <h1 class="h1">膝盖俯卧撑</h1>
+              <p class="cap" style="margin-top:2px;letter-spacing:.06em">KNEELING PUSH-UPS</p>
+              <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+                <span class="badge b-lv2"><span class="dot"></span>初级</span>
+                <span class="badge b-todo">第 3 式 / 共 10 式</span>
+              </div>
+            </div>
+
+            <div class="figslot">
+              <div class="sq">图</div>
+              <div class="tx">
+                <p class="h3">动作示意图位</p>
+                <p class="cap">3:2 · 待补充 · 点击展开</p>
+              </div>
+            </div>
+
+            <p class="body">以膝为支点做俯卧撑，把<span class="good">下肢重量从动作中移除</span>，
+              让人体从「上斜」过渡到接近水平的地面推撑。下沉时<span class="good">膝髋肩保持一条直线</span>，
+              胸部下沉到接近地面，是最接近标准俯卧撑的过渡式。</p>
+
+            <div class="warn">
+              <p><b>保护膝与腰。</b>膝下垫软垫；<span class="bad">不要塌腰借力</span>，下沉幅度以胸部接近地面为准。</p>
+            </div>
+          </div>
+
+          <!-- 进阶条件：核心交互 -->
+          <div style="padding:0 16px 14px">
+            <div class="card" id="cond" style="border-color:#CFE9DA;background:linear-gradient(180deg,#F4FCF7 0%,#fff 60%)">
+              <div class="sec g" style="margin-bottom:6px">
+                <i></i><p class="h3">本式进阶条件</p><span class="count" id="cnt">0 / 3</span>
+              </div>
+              <p class="cap" style="margin:0 0 6px">逐项确认达标，全部勾满即可进入下一式。</p>
+              <ul class="checks">
+                <li class="check" data-on="0" tabindex="0">
+                  <span class="box">✓</span>
+                  <span class="check-txt">完成 <span class="num">3 组 × 30 次</span></span>
+                </li>
+                <li class="check" data-on="0" tabindex="0">
+                  <span class="box">✓</span>
+                  <span class="check-txt"><span class="good">膝、髋、肩成一条直线</span></span>
+                </li>
+                <li class="check" data-on="0" tabindex="0">
+                  <span class="box">✓</span>
+                  <span class="check-txt">胸部下沉接近地面、<span class="bad">无塌腰借力</span></span>
+                </li>
+              </ul>
+              <div style="margin-top:12px">
+                <div class="bar bar--green"><i id="bar" style="width:0%"></i></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pad" style="padding-top:0;display:flex;flex-direction:column;gap:18px">
+            <div>
+              <div class="sec"><i></i><p class="h3">分解步骤</p><span class="count">6 步</span></div>
+              <ol class="ol">
+                <li><span class="no">1</span><p>双手撑地略宽于肩，双膝跪地，膝与髋同宽</p></li>
+                <li><span class="no">2</span><p>从膝到肩<span class="good">锁成一条直线</span>，收紧腹部与臀部</p></li>
+                <li><span class="no">3</span><p>屈肘下沉，肘部与躯干约 <span class="num">45°</span>，胸部接近地面</p></li>
+                <li><span class="no">4</span><p><span class="term">肩胛</span>随动作自然收放，下沉 <span class="num">2 秒</span>、推起 <span class="num">1 秒</span></p></li>
+              </ol>
+            </div>
+
+            <div>
+              <div class="sec g"><i></i><p class="h3">要领要点</p></div>
+              <div class="kv">
+                <div class="row"><p><span class="lbl good">保持直线：</span>膝髋肩成一条线，<span class="bad">不要</span>撅臀或塌腰</p></div>
+                <div class="row"><p><span class="lbl good">肘部内收：</span>肘尖朝斜后方约 <span class="num">45°</span>，避免外展 <span class="num">90°</span></p></div>
+              </div>
+            </div>
+
+            <div>
+              <div class="sec r"><i></i><p class="h3">常见错误</p></div>
+              <div class="kv">
+                <div class="row r"><p><span class="lbl bad">臀部高抬：</span>膝髋肩折成两段 —— 收紧核心，把躯干压回一条直线</p></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stickycta">
+            <button class="btn btn--primary btn--block" id="cta" disabled>完成本式 · 进入第 4 式</button>
+            <p class="btn-note" id="hint">还差 3 项进阶条件</p>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><span class="ic"></span>首页</div>
+          <div class="tab on"><span class="ic"></span>六艺</div>
+          <div class="tab"><span class="ic"></span>训练</div>
+          <div class="tab"><span class="ic"></span>我的</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================== 屏 3：训练计划 ========================== -->
+    <div class="frame-wrap">
+      <p class="frame-label"><span>03</span> 训练计划</p>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><span>5G ▮▮▮</span></div>
+        <div class="viewport">
+          <div class="appbar">
+            <div class="brand">训练计划</div>
+            <div class="sub">本周 2/3</div>
+          </div>
+          <div class="pad stack">
+
+            <div class="card card--plan">
+              <div class="card-head">
+                <div class="ring" style="--p:66">
+                  <b>2<i>/3</i></b>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <p class="eyebrow">今日 · 周三</p>
+                  <p class="h2" style="margin-top:4px">俯卧撑 · 第 3 式</p>
+                  <p class="cap" style="margin-top:4px">膝盖俯卧撑 · <span class="num">3 组 × 30 次</span> · 组间休息 <span class="num">2 分钟</span></p>
+                </div>
+              </div>
+              <button class="btn btn--primary btn--block" style="margin-top:14px">完成今日打卡</button>
+              <p class="btn-note">连续训练 <b style="color:var(--accent)">5 天</b> · 累计打卡 14 次</p>
+            </div>
+
+            <div class="card card--flat">
+              <div class="sec" style="margin-bottom:10px"><i></i><p class="h3">本周排程</p></div>
+              <div class="week">
+                <div class="day on"><div class="d">一</div><div class="s">✓</div><div class="t">3式</div></div>
+                <div class="day off"><div class="d">二</div><div class="s">·</div><div class="t">休息</div></div>
+                <div class="day today"><div class="d">三</div><div class="s">3</div><div class="t">今天</div></div>
+                <div class="day off"><div class="d">四</div><div class="s">·</div><div class="t">休息</div></div>
+                <div class="day"><div class="d">五</div><div class="s">→</div><div class="t">待练</div></div>
+                <div class="day off"><div class="d">六</div><div class="s">·</div><div class="t">休息</div></div>
+                <div class="day off"><div class="d">日</div><div class="s">·</div><div class="t">休息</div></div>
+              </div>
+            </div>
+
+            <div class="card card--flat">
+              <div class="sec" style="margin-bottom:4px"><i></i><p class="h3">计划设置</p></div>
+              <div class="setting"><span>每周训练天数</span><span class="v">3 天</span></div>
+              <div class="setting"><span>训练日</span><span class="v">一 / 三 / 五</span></div>
+              <div class="setting"><span>主练艺</span><span class="v">俯卧撑</span></div>
+              <div class="setting"><span>每式组间休息</span><span class="v">2 分钟</span></div>
+              <div class="setting"><span>达标后自动进阶</span><span class="v">已开启</span></div>
+            </div>
+
+            <div class="warn">
+              <p><b>不练到力竭。</b>每式达标即止，留余力给下一式；感到疼痛或明显不适请立刻停止。</p>
+            </div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><span class="ic"></span>首页</div>
+          <div class="tab"><span class="ic"></span>六艺</div>
+          <div class="tab on"><span class="ic"></span>训练</div>
+          <div class="tab"><span class="ic"></span>我的</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="footnote"><b>说明：</b>此页为纯静态设计稿（不参与构建、不影响站点），用于确认视觉方向。第二屏的勾选交互与吸底按钮解锁为真实可点，可用来评估手感。整块内容共享同一套 CSS 变量，落地时直接映射到 <b>src/index.css</b> 与 <b>tailwind.config.ts</b> 的设计 token。</p>
+</div>
+
+<script>
+  (function () {
+    var root = document.getElementById('cond');
+    if (!root) return;
+    var items = root.querySelectorAll('.check');
+    var cnt = document.getElementById('cnt');
+    var bar = document.getElementById('bar');
+    var cta = document.getElementById('cta');
+    var hint = document.getElementById('hint');
+
+    function sync() {
+      var on = 0;
+      items.forEach(function (el) {
+        if (el.getAttribute('data-on') === '1') on++;
+      });
+      cnt.textContent = on + ' / ' + items.length;
+      bar.style.width = (on / items.length * 100) + '%';
+      if (on === items.length) {
+        cta.disabled = false;
+        hint.innerHTML = '<b style="color:var(--success)">已全部达标，可以进阶了</b>';
+      } else {
+        cta.disabled = true;
+        hint.textContent = '还差 ' + (items.length - on) + ' 项进阶条件';
+      }
+    }
+
+    items.forEach(function (el) {
+      function toggle() {
+        el.setAttribute('data-on', el.getAttribute('data-on') === '1' ? '0' : '1');
+        sync();
+      }
+      el.addEventListener('click', toggle);
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    });
+    sync();
+  })();
+</script>
+</body>
+</html>

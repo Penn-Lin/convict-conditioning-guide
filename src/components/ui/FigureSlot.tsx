@@ -52,6 +52,15 @@ export interface FigureSlotProps {
   src?: string;
   /** 真实图片的替代文本（可选）。容器已承载 `aria-label`，此处缺省为空字符串。 */
   alt?: string;
+  /**
+   * 占位形态（v2 新增）：
+   * - `block`（默认）：完整比例的占位框，用于六艺封面 / 列表缩略图；
+   * - `strip`：**单行紧凑条**（约 62px 高），用于十式详情页首屏 ——
+   *   v1 的 3:2 空灰框在 375px 上是 250px 高的「缺图提示」，把首屏黄金位置
+   *   全给了「没做完」的观感；改成紧凑条后首屏还给标题与进阶条件。
+   *   补图后只需把 `variant` 改回 `block` 并传 `src`，页面结构不变。
+   */
+  variant?: 'block' | 'strip';
 }
 
 /**
@@ -68,8 +77,32 @@ export function FigureSlot({
   className = '',
   src,
   alt = '',
+  variant = 'block',
 }: FigureSlotProps) {
   const intrinsic = RATIO_INTRINSIC[ratio];
+
+  /* ---- 紧凑条形态：单行、约 62px 高，首屏友好 ---- */
+  if (variant === 'strip') {
+    return (
+      <div
+        role="img"
+        aria-label={label}
+        className={[
+          'flex w-full min-w-0 items-center gap-2.5 rounded-md border border-dashed border-border bg-surface2 px-3 py-2.5 text-muted',
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <ImageOff aria-hidden="true" className="h-4 w-4 shrink-0 opacity-70" />
+        <span className="min-w-0 flex-1 truncate text-sm leading-tight">
+          {badge ? <span className="font-semibold text-text">{badge} · </span> : null}
+          {label}
+        </span>
+        <span className="shrink-0 text-xs">{note}</span>
+      </div>
+    );
+  }
 
   return (
     <div

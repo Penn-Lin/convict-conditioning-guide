@@ -39,6 +39,7 @@ interface NavItem {
 const PRIMARY_NAV: readonly NavItem[] = [
   { to: '/', label: '首页', end: true },
   { to: '/arts', label: '六艺总览' },
+  { to: '/plan', label: '训练计划' },
   { to: '/principles', label: '训练原则' },
   { to: '/about', label: '关于' },
 ];
@@ -48,10 +49,11 @@ const MOBILE_NAV_ID = 'site-mobile-nav';
 
 /** 桌面导航链接基础样式 */
 const DESKTOP_LINK_BASE =
-  'inline-flex min-h-11 items-center rounded px-3 text-sm font-medium transition-colors';
+  'inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold transition-colors';
 
 /** 移动端导航链接基础样式 */
-const MOBILE_LINK_BASE = 'flex min-h-11 items-center rounded px-2 text-base font-medium';
+const MOBILE_LINK_BASE =
+  'flex min-h-11 items-center rounded-md px-2.5 text-base font-semibold';
 
 /**
  * 顶栏。

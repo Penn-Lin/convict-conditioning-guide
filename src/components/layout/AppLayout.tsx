@@ -1,26 +1,26 @@
 /**
- * AppLayout —— 全站布局骨架（架构 §2.5 / §6.2 / §9.6 · T07）。
+ * AppLayout —— 全站布局骨架（v2）。
  *
- * 结构：顶栏 `Header` + 主区 `<Outlet />` + 页脚 `Footer`。
+ * 结构：安全提示条 → 顶栏 `Header` → 主区 `<Outlet />` → 底部标签栏 `BottomNav` → 页脚。
+ *
+ * v2 变化：
+ * - **挂载 `TrainingProvider`**：全站共享同一份训练状态实例。
+ *   若各页面各调一次 hook，就会出现「A 处打卡，B 处不更新」的经典本地状态分裂。
+ * - **新增移动端底部标签栏**（`< md` 显示）：首页 / 六艺 / 训练 / 原则，
+ *   训练中切换页面的成本从「三次点击」降到「一次」。
  *
  * 关键行为：
- * - **路由切换后滚动复位**：监听 `pathname` 变化执行 `window.scrollTo`。
- *   使用 `behavior: 'instant'` 强制**瞬时**回顶 —— `index.css` 全局设置了
- *   `html { scroll-behavior: smooth }`（服务于页内锚点），若用默认行为会让回顶
- *   变成动画，导致切换后 `window.scrollY` 短时间不为 0；强制 instant 保证
- *   路由切换后立即回到顶部（`window.scrollY === 0`）。
- * - **T08 免责提示条挂载**：在**顶栏之上、主区之前**渲染 `<DisclaimerBar />`
- *   （首次访问显示的安全提示条，可关闭并持久化）。
- *
- * 语义说明：主区用 `<div>` 而非 `<main>` 包裹 —— 当前 7 个页面（占位）与后续
- * T09/T10 页面**自身**渲染 `<main>` 地标，若此处再用 `<main>` 会出现两个
- * `<main>`（违反「每页唯一 main」）。故由页面持有 main 地标，布局只提供容器。
+ * - **路由切换后滚动复位**：`behavior: 'instant'` 强制瞬时回顶 ——
+ *   `index.css` 全局设置了 `html { scroll-behavior: smooth }`（服务于页内锚点），
+ *   用默认行为会让回顶变成动画。页面内 `#anchor` 跳转不受影响（同 pathname 不触发）。
  */
 import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { DisclaimerBar } from '@/components/layout/DisclaimerBar';
+import { BottomNav } from '@/components/ui/BottomNav';
+import { TrainingProvider } from '@/hooks/TrainingProvider';
 
 /**
  * 全站布局。
@@ -32,30 +32,32 @@ import { DisclaimerBar } from '@/components/layout/DisclaimerBar';
  * </Route>
  */
 export function AppLayout() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
 
-  // 路由切换 → 瞬时回顶（避免全局 smooth 动画影响断言与体验）。
+  // 路由切换 → 瞬时回顶（带 #anchor 的跳转交给浏览器处理，不抢）
   useEffect(() => {
+    if (hash) return;
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [pathname]);
+  }, [pathname, hash]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg text-text">
-      {/* T08 · 首访安全提示条（P0-7）：顶栏之上、主区之前。
-          T13 修复：免责条原为地标之外的顶层 <aside role="note">，axe 报 region 违规。
-          现包一层具名 <section aria-label>（即 region 地标），把内容纳入地标；
-          视觉位置（仍在最顶端）与行为（可关闭 + localStorage 持久化）均不变。 */}
-      <section aria-label="安全提示">
-        <DisclaimerBar />
-      </section>
+    <TrainingProvider>
+      <div className="flex min-h-screen flex-col bg-bg text-text">
+        <section aria-label="安全提示">
+          <DisclaimerBar />
+        </section>
 
-      <Header />
+        <Header />
 
-      <div className="flex flex-1 flex-col">
-        <Outlet />
+        <div className="flex flex-1 flex-col">
+          <Outlet />
+        </div>
+
+        <Footer />
+
+        {/* 移动端底部标签栏（< md） */}
+        <BottomNav />
       </div>
-
-      <Footer />
-    </div>
+    </TrainingProvider>
   );
 }

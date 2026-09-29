@@ -6,6 +6,8 @@
   "description": "《囚徒健身》六艺十式动作指导站 —— 纯静态客户端 SPA",
   "scripts": {
     "dev": "vite",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && node scripts/gen-sitemap.mjs",
     "build:sitemap": "node scripts/gen-sitemap.mjs",
     "preview": "vite preview"
@@ -25,6 +27,7 @@
     "autoprefixer": "^10.4.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "@types/node": "^20.14.0"
+    "@types/node": "^20.14.0",
+    "vitest": "^2.1.9"
   }
 }

@@ -3,56 +3,111 @@
 @tailwind utilities;
 
 /* ===========================================================================
-   双主题 CSS 变量（架构 §9.3.2）
+   v2 设计系统 · CSS 变量（架构 §9.3.2 的 v2 修订）
    —— 通道值以「空格分隔的 RGB」存储，以支持 Tailwind 透明度修饰符（如 bg-bg/80）
    —— 浅色为默认（:root），深色为可选覆盖（.dark），两者共用同一套语义 token 名
+
+   v2 相对 v1 的改动（皆为「视觉层」改动，不改任何内容与语义）：
+   1. 底色由纯白改为**暖中性**（#FCFCFB）——纯白 + 灰底在手机 OLED 上过冷、有塑料感；
+   2. 卡片底色改为**纯白 + 极轻阴影**，与底色形成「浮起」而非「贴平」的关系；
+   3. 新增 `--accent-soft / --success-soft / --danger-soft / --info-soft`
+      四组「语义淡底」，用于语义卡与高亮块（v1 只能靠同色 10% 透明度，浅色下对比度不够）；
+   4. 新增六艺色相 token（`--art-*`），只用于序号徽章 / 进度条 / 淡底，
+      **文字仍走 `--text`，保证对比度不掉**。
    =========================================================================== */
 
-/* 浅色主题（默认，PRD §7.2.1 实测值） */
+/* 浅色主题（默认） */
 :root {
-  --bg: 255 255 255;         /* #FFFFFF */
-  --surface: 247 248 250;    /* #F7F8FA */
-  --surface-2: 238 241 244;  /* #EEF1F4 */
-  --border: 208 213 221;     /* #D0D5DD */
-  --text: 26 29 33;          /* #1A1D21  对白底 16.9:1 */
-  --text-muted: 82 88 95;    /* #52585F  对白底 7.2:1  */
-  --accent: 194 65 12;       /* #C2410C  对白底 5.2:1  */
-  --success: 21 128 61;      /* #15803D  对白底 5.0:1  */
-  --danger: 185 28 28;       /* #B91C1C  对白底 6.5:1  */
+  color-scheme: light;
+
+  /* ---- 基础面 ---- */
+  --bg: 252 252 251;         /* #FCFCFB 暖白底 */
+  --surface: 255 255 255;    /* #FFFFFF 卡片 */
+  --surface-2: 245 245 244;  /* #F5F5F4 内嵌块 / 次级底 */
+  --border: 226 226 224;     /* #E2E2E0 细分隔线 */
+  --border-strong: 205 206 203; /* #CDCECB 强调描边 */
+
+  /* ---- 文字（对白底对比度） ---- */
+  --text: 24 24 27;          /* #18181B  17.0:1 */
+  --text-muted: 92 92 99;    /* #5C5C63   6.4:1 */
+  --text-subtle: 130 130 138; /* #82828A  3.9:1（仅用于 ≥18px 或非关键信息） */
+
+  /* ---- 语义色（浅色下均 ≥4.5:1） ---- */
+  --accent: 194 65 12;       /* #C2410C 橙  5.2:1 主行动色 */
+  --success: 21 128 61;      /* #15803D 绿  5.0:1 正确做法 */
+  --danger: 185 28 28;       /* #B91C1C 红  6.5:1 风险 / 禁忌 */
+  --info: 29 78 216;         /* #1D4ED8 蓝  7.0:1 补充说明 */
+
+  /* ---- 语义淡底（卡片背景，文字仍用深色） ---- */
+  --accent-soft: 255 237 213;  /* #FFEDD5 */
+  --success-soft: 220 252 231; /* #DCFCE7 */
+  --danger-soft: 254 226 226;  /* #FEE2E2 */
+  --info-soft: 219 234 254;    /* #DBE4FE */
+
+  /* ---- 难度 5 级 ---- */
   --lv-1: 21 128 61;         /* 入门 #15803D */
   --lv-2: 29 78 216;         /* 初级 #1D4ED8 */
   --lv-3: 180 83 9;          /* 中级 #B45309 */
   --lv-4: 194 65 12;         /* 进阶 #C2410C */
   --lv-5: 185 28 28;         /* 高阶 #B91C1C */
+
+  /* ---- 六艺色相（只用在小面积装饰上） ---- */
+  --art-pushups: 194 65 12;            /* 橙 */
+  --art-squats: 21 128 61;             /* 绿 */
+  --art-pullups: 29 78 216;            /* 蓝 */
+  --art-leg-raises: 190 24 93;         /* 玫红 */
+  --art-bridges: 15 118 110;           /* 青 */
+  --art-handstand-pushups: 126 34 206; /* 紫 */
+
+  /* ---- 阴影基色（极轻阴影：靠层次不靠描边） ---- */
+  --shadow-color: 24 24 27;
 }
 
-/* 深色主题（可选切换，非默认，PRD §7.2.2） */
+/* 深色主题（可选切换） */
 .dark {
-  --bg: 15 17 21;            /* #0F1115 */
-  --surface: 23 25 28;       /* #17191C */
-  --surface-2: 34 37 42;     /* #22252A */
-  --border: 46 50 56;        /* #2E3238 */
-  --text: 242 244 247;       /* #F2F4F7 */
-  --text-muted: 166 173 181; /* #A6ADB5 */
-  --accent: 255 122 69;      /* #FF7A45 */
+  color-scheme: dark;
+
+  --bg: 14 15 18;            /* #0E0F12 */
+  --surface: 24 25 29;       /* #18191D */
+  --surface-2: 34 36 41;     /* #222429 */
+  --border: 45 47 53;        /* #2D2F35 */
+  --border-strong: 62 65 72; /* #3E4148 */
+
+  --text: 243 244 246;       /* #F3F4F6 */
+  --text-muted: 168 173 181; /* #A8ADB5 */
+  --text-subtle: 128 133 141; /* #80858D */
+
+  --accent: 253 139 84;      /* #FD8B54 */
   --success: 74 222 128;     /* #4ADE80 */
   --danger: 248 113 113;     /* #F87171 */
-  --lv-1: 74 222 128;        /* #4ADE80 */
-  --lv-2: 96 165 250;        /* #60A5FA */
-  --lv-3: 251 191 36;        /* #FBBF24 */
-  --lv-4: 251 146 60;        /* #FB923C */
-  --lv-5: 248 113 113;       /* #F87171 */
+  --info: 96 165 250;        /* #60A5FA */
+
+  --accent-soft: 60 30 14;
+  --success-soft: 18 48 30;
+  --danger-soft: 56 24 24;
+  --info-soft: 20 36 62;
+
+  --lv-1: 74 222 128;
+  --lv-2: 96 165 250;
+  --lv-3: 251 191 36;
+  --lv-4: 253 139 84;
+  --lv-5: 248 113 113;
+
+  --art-pushups: 253 139 84;
+  --art-squats: 74 222 128;
+  --art-pullups: 96 165 250;
+  --art-leg-raises: 244 114 182;
+  --art-bridges: 45 212 191;
+  --art-handstand-pushups: 192 132 252;
+
+  --shadow-color: 0 0 0;
 }
 
 @layer base {
   html {
-    color-scheme: light;
-    /* 平滑滚动（受 prefers-reduced-motion 约束，见下） */
     scroll-behavior: smooth;
-  }
-
-  html.dark {
-    color-scheme: dark;
+    /* 移动端去掉点击高亮闪烁，改用 :active 的自定义反馈 */
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
@@ -60,14 +115,22 @@
     font-size: 16px;
     line-height: 1.7;
     min-height: 100vh;
+    /* 中文正文换行优化 */
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
-  /* 键盘可达焦点环（禁止移除，见 §9.7） */
+  /* 数字统一等宽，避免进度数字跳动 */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 键盘可达焦点环（禁止移除） */
   :focus-visible {
     @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-bg;
   }
 
-  /* 尊重「减少动态效果」偏好（§9.7.3） */
+  /* 尊重「减少动态效果」偏好 */
   @media (prefers-reduced-motion: reduce) {
     html {
       scroll-behavior: auto;
@@ -80,5 +143,56 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer utilities {
+  /* 底部安全区（iPhone 横条 / 安卓手势条） */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* 底部标签栏存在时，主内容需要留出的高度。
+     标签栏只在 < md(1024px) 显示，所以 ≥1024px 时收回到普通页脚间距。 */
+  .pb-nav {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 1024px) {
+    .pb-nav {
+      padding-bottom: 2.5rem;
+    }
+  }
+
+  /* 底部同时有「吸底 CTA + 标签栏」时，主内容要再让出一段（十式详情页用） */
+  .pb-nav-cta {
+    padding-bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 1024px) {
+    .pb-nav-cta {
+      padding-bottom: 6.5rem;
+    }
+  }
+
+  /* 横向吸附滚动（周排程条 / 锚点条） */
+  .scroll-x {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 渐变文字（用于「继续训练」大卡的数字） */
+  .text-gradient-accent {
+    background-image: linear-gradient(
+      100deg,
+      rgb(var(--accent)),
+      rgb(var(--art-leg-raises))
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }

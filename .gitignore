@@ -37,6 +37,9 @@ Thumbs.db
 .cache/
 .vite/
 
+# npm 缓存（沙箱内安装时被迫放在项目内，禁止提交）
+.npm-cache/
+
 # 版权书籍，仅本地核对用，禁止提交
 *.mobi
 *.pdf

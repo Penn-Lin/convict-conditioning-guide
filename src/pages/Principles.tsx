@@ -49,7 +49,7 @@ const SAFETY_RULES: readonly string[] = [
 const BODY_CLASS = 'text-base leading-[1.7] text-text';
 
 /** 页面主容器样式 */
-const CONTAINER_CLASS = 'mx-auto w-full max-w-3xl px-4 py-8 sm:py-10';
+const CONTAINER_CLASS = 'mx-auto w-full max-w-3xl px-4 pb-nav pt-6 md:pt-8';
 
 /**
  * 训练原则页。

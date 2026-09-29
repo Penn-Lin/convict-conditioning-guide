@@ -63,7 +63,7 @@ export function NotFound() {
   useDocumentMeta(NOT_FOUND_TITLE, NOT_FOUND_DESCRIPTION);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+    <main className="mx-auto w-full max-w-3xl px-4 pb-nav pt-10 sm:px-6">
       <NotFoundContent />
     </main>
   );

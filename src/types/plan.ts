@@ -1,0 +1,389 @@
+/**
+ * 动态训练计划系统 · 领域类型契约（设计文档 `docs/DYNAMIC-PLAN-DESIGN.md` §2）。
+ *
+ * 与 `src/types/index.ts`（六艺十式内容模型）**平级、互不侵入**：
+ * - `src/types/index.ts` 描述「动作是什么」（60 式静态内容，只读）；
+ * - 本文件描述「用户在练什么、练得怎么样、今天该练什么」（动态状态与计划产物）。
+ *
+ * 依赖方向单向：UI → hooks → engine → types。本文件不 import 任何运行时代码。
+ */
+import type { ArtSlug } from '@/types';
+
+export type { ArtSlug };
+
+/* ---------------------------------------------------------------------------
+ * 基础枚举
+ * ------------------------------------------------------------------------ */
+
+/** 计量方式：次数型 / 保持型（倒立撑前几式为「保持 N 秒」） */
+export type MetricKind = 'reps' | 'hold';
+
+/** 主观疲劳评分：1 = 状态很好 → 5 = 很累（3 为中性） */
+export type FatigueScore = 1 | 2 | 3 | 4 | 5;
+
+/** 每次可用时间档（分钟） */
+export type SessionMinutes = 15 | 30 | 45 | 60;
+
+/** 六艺推进状态 */
+export type SkillStatus = 'not_started' | 'active' | 'stalled' | 'mastered';
+
+/** 一次训练的会话状态 */
+export type SessionState = 'planned' | 'in_progress' | 'done' | 'skipped';
+
+/** 计划中一项的角色 */
+export type ItemRole = 'main' | 'assist' | 'optional';
+
+/** 中途停止的原因 */
+export type AbortReason = 'pain' | 'time' | 'energy' | 'other';
+
+/** 首次使用时用户自评水平（只用于冷启动预设，不参与后续计算） */
+export type SelfLevel = 'new' | 'some' | 'trained';
+
+/** 训练量阶梯的单档（由 `Move.trainingGoal` 的三档派生） */
+export interface VolumeTier {
+  /** 组数 */
+  sets: number;
+  /** 单组目标：次数（`reps`）或秒数（`hold`） */
+  perSet: number;
+}
+
+/* ---------------------------------------------------------------------------
+ * 用户与六艺状态
+ * ------------------------------------------------------------------------ */
+
+/** 用户档案（单用户，本地存储） */
+export interface UserProfile {
+  id: string;
+  createdAt: string;
+  /** 首次使用引导的答案（最小集合，可跳过细节） */
+  onboarding: {
+    /** 每周大概训练几天 */
+    daysPerWeek: 2 | 3 | 4 | 5 | 6;
+    /** 每次通常多少时间（作为 /plan 页默认值，每天仍可改） */
+    sessionMinutes: SessionMinutes;
+    /** 自评水平 */
+    level: SelfLevel;
+    /** 用户逐项填写的当前式号 / 能完成的次数（可空） */
+    selfReport: Partial<Record<ArtSlug, { step?: number; maxReps?: number }>>;
+  };
+}
+
+/** 一次训练的摘要（倒序存放，长度上限 `config.historyWindow`） */
+export interface SessionSummary {
+  sessionId: string;
+  /** 'YYYY-MM-DD' */
+  date: string;
+  stepNo: number;
+  volumeTier: number;
+  metric: MetricKind;
+  /** Σ 目标（次数或秒） */
+  plannedTotal: number;
+  /** Σ 实际 */
+  actualTotal: number;
+  /** actualTotal / plannedTotal */
+  completionRatio: number;
+  fatigue: FatigueScore | null;
+  aborted: boolean;
+}
+
+/**
+ * 六艺各一条的**存储态**（只记事实，不含派生判断）。
+ * 派生计算态见 `SkillSnapshot`（每次生成计划时即时算出，可随配置变化重算）。
+ */
+export interface TrainingSkill {
+  slug: ArtSlug;
+  /** 当前所在式号 1–10；11 表示该艺十式全部完成 */
+  currentStep: number;
+  /** 已确认完成的式号（升序）；`currentStep` 由用户显式推进，两者不强制一致 */
+  completedSteps: number[];
+  /** 进阶条件逐项勾选状态：`checks[stepNo] = [true, false, ...]` */
+  checks: Record<number, boolean[]>;
+  /** 该式开始日期 */
+  stepStartedAt: string | null;
+  /** 训练量档下标，指向 `volumeLadder[tier]` */
+  volumeTier: number;
+  /** 最近一次训练时间（ISO，精确到秒） */
+  lastTrainedAt: string | null;
+  lastTrainedStep: number | null;
+  /** 最近若干次训练摘要（**倒序**，最新的在前） */
+  recentSessions: SessionSummary[];
+  /** 最近一次训练的疲劳评分（原始值；衰减在 snapshot 中计算） */
+  lastFatigue: FatigueScore | null;
+  /** 连续「轻松完成」次数（训练量档提升判定用） */
+  consecutiveEasy: number;
+  /** 连续「明显失败」次数（降量 / 停滞判定用） */
+  consecutiveFail: number;
+  /** 临时降量标记：完成度异常低后，下一次该艺训练量降一档（一次性） */
+  softDowngrade: boolean;
+  /** 用户长期关闭该艺（「我的」里设置，非当天排除） */
+  excluded: boolean;
+  note?: string;
+}
+
+/* ---------------------------------------------------------------------------
+ * 训练记录
+ * ------------------------------------------------------------------------ */
+
+export interface WorkoutSet {
+  index: number;
+  /** 目标次数或秒数 */
+  target: number;
+  /** 实际完成（null = 未记录） */
+  actual: number | null;
+  done: boolean;
+}
+
+export interface WorkoutExercise {
+  skill: ArtSlug;
+  stepNo: number;
+  role: ItemRole;
+  metric: MetricKind;
+  volumeTier: number;
+  order: number;
+  restSeconds: number;
+  sets: WorkoutSet[];
+  /** 一句话理由（UI 直接展示） */
+  reason: string;
+}
+
+export interface TrainingFeedback {
+  sessionId: string;
+  /** 必填：训练结束后一次 4 档反馈 */
+  fatigue: FatigueScore;
+  /** 是否中途停止 */
+  aborted: boolean;
+  abortReason?: AbortReason;
+  note?: string;
+  collectedAt: string;
+}
+
+export interface WorkoutSession {
+  id: string;
+  /** 'YYYY-MM-DD' */
+  date: string;
+  generatedAt: string;
+  endedAt: string | null;
+  availableMinutes: SessionMinutes;
+  kind: 'training' | 'recovery';
+  /** 主训艺；恢复日为 `null` */
+  mainSkill: ArtSlug | null;
+  exercises: WorkoutExercise[];
+  state: SessionState;
+  /** 生成时的快照，用于事后解释「当时为什么这么排」 */
+  planSnapshot: DailyPlan;
+  /** 用户对计划的主动修改 */
+  appliedOptions: PlanOptions;
+  /** 重算次数 */
+  revision: number;
+  feedback?: TrainingFeedback;
+}
+
+/* ---------------------------------------------------------------------------
+ * 生成产物契约（UI 只认这一组）
+ * ------------------------------------------------------------------------ */
+
+export interface PlanItem {
+  skill: ArtSlug;
+  stepNo: number;
+  nameZh: string;
+  nameEn: string;
+  role: ItemRole;
+  metric: MetricKind;
+  volumeTier: number;
+  sets: number;
+  /** 单组目标：次数或秒数 */
+  targetPerSet: number;
+  /** 组间休息秒数 */
+  restSeconds: number;
+  /** 预估耗时（分钟，保留 1 位） */
+  estimatedMinutes: number;
+  /** 一句话理由 */
+  reason: string;
+}
+
+/** 解释文案的语义代码（UI 按 code 选样式，文案由引擎给全） */
+export type ReasonCode =
+  | 'RECOVERY_FULL'
+  | 'RECOVERY_MODERATE'
+  | 'RECOVERY_RECENT'
+  | 'NEVER_TRAINED'
+  | 'COMPLETION_HIGH'
+  | 'COMPLETION_LOW'
+  | 'FATIGUE_HIGH'
+  | 'FATIGUE_OK'
+  | 'OVERLAP_RECENT'
+  | 'COMPLEMENT_MAIN'
+  | 'FOCUS_PRIMARY'
+  | 'STALLED'
+  | 'TIME_BUDGET'
+  | 'WEEK_DEFICIT'
+  | 'USER_EXCLUDE'
+  | 'USER_ONLY'
+  | 'VOLUME_SCALE'
+  | 'PROGRESSION_READY'
+  | 'RECOVERY_DAY'
+  | 'SOFT_RETURN';
+
+export interface PlanReason {
+  skill?: ArtSlug;
+  code: ReasonCode;
+  /** 已用真实数值填好的最终文案 */
+  text: string;
+  /** 参与计算的真实数值（便于调试 / 后续 i18n / 单测断言） */
+  values: Record<string, number | string>;
+}
+
+/** 被排除的项目及原因（透明度：让用户看到「今天为什么没排它」） */
+export interface ExclusionRecord {
+  skill: ArtSlug;
+  code: ExclusionCode;
+  text: string;
+}
+
+export type ExclusionCode =
+  | 'TRAINED_TODAY'
+  | 'HIGH_FATIGUE'
+  | 'STALLED'
+  | 'USER_EXCLUDE'
+  | 'USER_ONLY'
+  | 'MASTERED'
+  | 'LOW_PRIORITY';
+
+/** 优先级打分的完整明细（UI「为什么是它？」折叠面板直接渲染） */
+export interface PriorityBreakdown {
+  total: number;
+  /** 排名（1 = 最高分） */
+  rank: number;
+  factors: {
+    key: 'recovery' | 'completion' | 'focus' | 'fatigue' | 'overlap' | 'stall';
+    /** 归一化后的因子值 0–1 */
+    raw: number;
+    weight: number;
+    /** raw × weight（带符号） */
+    contribution: number;
+    /** 「7 天没有训练，恢复充分」这类一句人话 */
+    text: string;
+  }[];
+}
+
+/** 用户对计划的主动修改 —— 所有计划变体的唯一入参 */
+export interface PlanOptions {
+  /** 今天的实际可用时间 */
+  availableMinutes?: SessionMinutes;
+  /** 今天不练（软排除，仅影响当天，不写回长期状态） */
+  excludeSkills?: ArtSlug[];
+  /** 今天只想练这些（白名单） */
+  onlySkills?: ArtSlug[];
+  /** 整体训练量缩放：0.6 / 0.8 / 1.0 / 1.2，只作用于组数 */
+  volumeScale?: number;
+  /** 「换一个方案」：排除当前主训后重算（确定性，非随机） */
+  avoidMain?: ArtSlug;
+  /** 'YYYY-MM-DD'；引擎**不取系统时间**，一律由调用方传入 */
+  today?: string;
+  /** 强制指定当日类型（恢复日兜底用） */
+  forceKind?: 'training' | 'recovery';
+}
+
+/** 今日计划（引擎唯一的输出契约） */
+export interface DailyPlan {
+  id: string;
+  /** 'YYYY-MM-DD' */
+  date: string;
+  generatedAt: string;
+  revision: number;
+  availableMinutes: SessionMinutes;
+  kind: 'training' | 'recovery';
+
+  /** 主训练（恢复日为 `null`） */
+  main: PlanItem | null;
+  assists: PlanItem[];
+  /** 加练自选池：时间有富余时用户自行挑选，**不自动加入** */
+  optional: PlanItem[];
+
+  totalEstimatedMinutes: number;
+  /** 剩余分钟数（建议用于热身与拉伸） */
+  freeMinutes: number;
+
+  /** 一句话摘要（首页 / 计划页首屏） */
+  summary: string;
+  /**
+   * 训练提示（含「为什么 45 分钟只安排了 15 分钟」的诚实说明）。
+   * 原书训练量本就是短时段、低组数、不练到力竭，所以时间预算不填满 —— 这条必须显式讲清，
+   * 否则用户会以为系统算错了。
+   */
+  tips: string[];
+  /** 结构化理由 */
+  reasons: PlanReason[];
+  /** 被排除的项目 */
+  excluded: ExclusionRecord[];
+  /** 六艺得分明细 */
+  scores: Record<ArtSlug, PriorityBreakdown>;
+
+  appliedOptions: PlanOptions;
+}
+
+/* ---------------------------------------------------------------------------
+ * 派生计算态
+ * ------------------------------------------------------------------------ */
+
+/** 每次生成计划时即时派生的计算态（存储态只记事实，计算态可随配置重算） */
+export interface SkillSnapshot {
+  slug: ArtSlug;
+  /** 原书顺序 1–6 */
+  order: number;
+  status: SkillStatus;
+  currentStep: number;
+  volumeTier: number;
+  /** 距上次训练的天数；null = 从未训练 */
+  daysSinceLast: number | null;
+  /** 距上次训练的小时数（48h 重叠窗口用）；null = 从未训练 */
+  hoursSinceLast: number | null;
+  /** 最近 N 次加权平均完成度（权重 N..1，按可用记录归一化） */
+  avgCompletion: number;
+  lastCompletion: number | null;
+  /** 疲劳现值（带日衰减），1–5 */
+  fatigueNow: number;
+  /** 与最近 48h 内已训练项目的最大重叠度 0–1 */
+  overlap48h: number;
+  /** 48h 窗口内训练过的艺（含自己） */
+  recentSkills: ArtSlug[];
+  /** 该式（currentStep）的训练量阶梯 */
+  ladder: VolumeTier[];
+  metric: MetricKind;
+  /** 晋级是否就绪（达到全部 promote 条件）——只产生「建议」，绝不自动改 `currentStep` */
+  progressionReady: boolean;
+  progressionHint: string | null;
+}
+
+/** 引擎的输入状态（由 `useTrainingState` 组装；引擎本身不读 localStorage） */
+export interface TrainingState {
+  /** 'YYYY-MM-DD' */
+  today: string;
+  /**
+   * 计算基准时刻（ISO，可选）。
+   * 真实运行时传当前时刻；不传则退化为「今天中午 12:00」——
+   * 这样按「天」记录的模拟数据能得到整数倍 24 小时，单测完全可复现。
+   */
+  now?: string;
+  profile: UserProfile;
+  skills: Record<ArtSlug, TrainingSkill>;
+  sessions: WorkoutSession[];
+}
+
+/** 单次训练结束后的判定结果（§8.4） */
+export interface ProgressionVerdict {
+  completionRatio: number;
+  outcome: 'easy' | 'normal' | 'near_miss' | 'hard_fail';
+  /** 建议提升训练量档（需用户确认） */
+  suggestTierUp: boolean;
+  suggestedTier: number;
+  /** 建议降低训练量档（需用户确认） */
+  suggestTierDown: boolean;
+  /** 建议降回上一式巩固（需用户确认） */
+  suggestDemote: boolean;
+  /** 是否达到停滞状态 */
+  stalled: boolean;
+  /** 下一次该艺是否应临时降量 */
+  softDowngrade: boolean;
+  text: string;
+}

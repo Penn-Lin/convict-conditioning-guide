@@ -1,10 +1,76 @@
 # 系统架构设计 + 任务分解 — 囚徒健身 · 六艺十式动作指导站
 
-> 版本：**v1.3**（增量修订，同步 PRD v1.2）
+> 版本：**v1.4**（增量修订，同步 PRD v2.0）
 > 作者：架构师 高见远
-> 上游输入：`docs/PRD.md`（**v1.2**）
+> 上游输入：`docs/PRD.md`（**v2.0**）、`docs/DYNAMIC-PLAN-DESIGN.md`（训练计划引擎设计）
 > 技术前提（已锁定，不再论证）：Vite + React 18 + TypeScript + Tailwind CSS，纯静态 SPA，托管 Cloudflare Pages
-> 状态：待 team-lead / 用户确认后进入实现
+> 状态：已实现
+
+---
+
+## v1.4 变更记录（v2.0 落地：规则引擎 + 进度系统 + 视觉层重构）
+
+PRD v2.0 把「训练打卡」与「自动生成训练计划」从 P2 提进本期，架构层相应地新增两层模块。
+**核心约束：引擎与 UI 严格分层**，因为引擎必须能在 Node 里跑单测，而 UI 必须能在契约冻结后独立改动。
+
+### 新增目录与依赖方向
+
+```
+UI 层       src/pages/**  src/components/**（含 plan/ 子目录）
+                │  ── 只消费 DailyPlan / SkillSnapshot 契约，不含规则逻辑
+应用层      src/hooks/useTrainingState.ts        localStorage 读写 + actions
+            src/hooks/TrainingProvider.tsx       全站共享单一状态实例（Context）
+                │
+规则引擎层  src/lib/plan/**（纯函数 · 无副作用 · 无 UI 依赖 · 不取系统时间）
+            snapshot → gate → priority → select → budget → explain
+            progression（晋级判定）· storage（持久化 schema + 迁移）
+                │
+配置层      src/lib/plan/config.ts                全部权重 / 阈值 / 矩阵 / 时间档预算
+类型层      src/types/plan.ts                     领域契约（与 src/types/index.ts 平级）
+数据层      src/data/arts/*.ts（现有 60 式，只读）
+```
+
+**依赖方向单向**：UI → hooks → engine → config/data。
+引擎**绝不** `import React`、**绝不**读 `localStorage`、**绝不**取当前时间（时间由调用方传入参数）——
+这是它能在 Vitest 里以纯 Node 环境运行的前提。
+
+### 关键设计决定（三条，皆有测试固定）
+
+1. **不新建内容表**：`TrainingSkill.volumeTier` 指向的「训练量阶梯」由 `Move.trainingGoal` 的三档
+   （初级 / 中级 / 高级）**派生**；进阶条件清单由 `progressionStandard` 按逗号拆分得到。
+   因此 60 式数据文件**一字未改**。
+2. **难度与训练量分离**：`currentStep`（1–10，动作难度）与 `volumeTier`（0–2，同一式内的量）
+   是两个独立维度；前者**只由用户点击推进**，后者由连续达标自动提升（仍需用户确认）。
+3. **唯一生成入口**：首次生成、排除某艺、换方案、加减量、改时间，全部走
+   `generateDailyPlan(state, options, revision)`，差异收敛到 `options`；无 `Math.random`，
+   同输入必得同输出（回归测试用 `JSON.stringify` 做全等断言）。
+
+### 新增持久化键
+
+```
+localStorage['cc.training.v1'] = {
+  version, profile,                                   // 档案 + 首次使用引导答案
+  skills: Record<ArtSlug, TrainingSkill>,             // 六艺进度 / 历史 / 训练量档
+  sessions: WorkoutSession[],                         // 训练会话（最新在前，上限 200）
+  todayPlan: DailyPlan | null                         // 今日计划缓存（跨刷新保留）
+}
+```
+
+**单键存储**的理由：一次 `setItem` 原子落盘，避免多 key 写入中途失败导致状态互相矛盾。
+`migrate()` 对缺字段一律补默认值，保证「旧数据 + 新版本代码」也能跑，而不是整份丢弃让用户白练。
+
+### 新增 devDependency
+
+`vitest`（**仅开发期**，不进入生产产物）。打包体积零增长，运行时依赖仍为
+react / react-dom / react-router-dom / lucide-react 四项。
+
+### 测试
+
+- `src/lib/plan/plan.test.ts`：40 项，夹具即 `docs/DYNAMIC-PLAN-DESIGN.md` §10 的模拟数据，
+  断言文档里每一个手算数字；
+- `src/lib/designTokens.test.ts`：设计系统守卫 —— 扫描 Tailwind 透明度修饰符是否在刻度内
+  （`bg-art-x/8` 这类值 Tailwind 不报错也不生成，会导致背景静默消失），
+  并断言六艺色相在浅 / 深两套主题下的类名完整。
 
 ---
 
