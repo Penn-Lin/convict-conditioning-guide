@@ -25,7 +25,10 @@ import { dirname, join } from 'node:path';
 /* ---------------------------------------------------------------------------
  * 站点基准 URL —— 部署时替换为真实域名（此处为占位值，与 public/robots.txt 保持一致）
  * ------------------------------------------------------------------------ */
-const SITE_URL = 'https://convict-conditioning-guide.pages.dev';
+// 站点实际部署地址。更换自定义域名时只改这一行即可。
+// 注意：部署在 Cloudflare **Workers**（静态资源），地址格式为 <Worker名>.<账户子域>.workers.dev，
+// 不是 Pages 的 <项目名>.pages.dev。
+const SITE_URL = 'https://convict-conditioning-guide.adasoigivea.workers.dev';
 
 /** 项目根目录（本脚本位于 `<root>/scripts/`，故上溯一层） */
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
