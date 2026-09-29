@@ -1,0 +1,34 @@
+/**
+ * Cloudflare Workers 部署配置
+ *
+ * 存在意义（重要，勿删）：
+ * 仓库里若**没有**本文件，`wrangler deploy` 会触发 Cloudflare 的「自动项目配置」
+ * （autoconfig）。它会去识别框架并自动改写项目配置，而它的自动配置要求 **Vite 6.0.0 及以上**。
+ * 本项目使用 Vite 5.4.21（整套验证——tsc / 60 页可达性 / Lighthouse 六页 100 分——
+ * 均在该版本上完成），于是构建会直接失败并报：
+ *   [ERROR] The version of Vite used in the project ("5.4.21") cannot be automatically
+ *   configured. Please update the Vite version to at least "6.0.0" and try again.
+ *
+ * 本文件**显式声明这是一个纯静态资源站点**，Wrangler 便不再做框架识别，直接把
+ * `dist/` 作为静态资源发布，因此无需升级 Vite。
+ *
+ * 注意：`name` 必须与 Cloudflare 控制台中该 Worker 的名称**完全一致**，否则构建会失败。
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // 必须与 Cloudflare 控制台里的 Worker 名称一致
+  "name": "convict-conditioning-guide",
+
+  "compatibility_date": "2026-09-29",
+
+  // 纯静态资源：把构建产物 dist/ 直接作为站点发布，不跑任何 Worker 脚本
+  "assets": {
+    "directory": "./dist",
+
+    // SPA 回退：未匹配到静态文件的路径一律返回 index.html。
+    // 这是本项目的关键配置——浏览 /arts/pushups/5 这类深层路由并刷新时，
+    // 服务器上并不存在该路径的文件，必须由前端路由接管，否则会 404。
+    "not_found_handling": "single-page-application"
+  }
+}
