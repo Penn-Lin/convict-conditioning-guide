@@ -35,6 +35,13 @@
     // SPA 回退：未匹配到静态文件的路径一律返回 index.html。
     // 这是本项目的关键配置——浏览 /arts/pushups/5 这类深层路由并刷新时，
     // 服务器上并不存在该路径的文件，必须由前端路由接管，否则会 404。
+    //
+    // ⚠️ 不要再用 public/_redirects 写 `/*  /index.html  200`（已于 2026-09-30 删除）：
+    // 那是 Cloudflare **Pages** 时代的经典写法，但 **Workers 静态资源**的校验器
+    // 会判定它无限循环并直接让构建失败：
+    //   Line 1: Infinite loop detected in this rule. This would cause a redirect to
+    //   strip `.html` or `/index` and end up triggering this rule again. [code: 100324]
+    // SPA 回退请一律依赖本文件的 not_found_handling，不要在 dist/ 里放 _redirects。
     "not_found_handling": "single-page-application"
   }
 }
