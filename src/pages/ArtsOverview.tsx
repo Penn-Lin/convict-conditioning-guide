@@ -5,7 +5,7 @@
  * 并把「推荐练习顺序」从纯文字列表改成带状态的时间线（哪门练完了、哪门在练、哪门没碰）。
  */
 import { Link } from 'react-router-dom';
-import { Check, Circle, Dot } from 'lucide-react';
+import { Check, Circle, Dot, Grid3x3, Route } from 'lucide-react';
 import type { ArtSlug } from '@/types';
 import { arts } from '@/data';
 import { ART_ORDER, MOVES_PER_ART, SITE_NAME } from '@/lib/constants';
@@ -15,6 +15,7 @@ import { useDocumentMeta } from '@/lib/seo';
 import { useTraining } from '@/hooks/TrainingProvider';
 import { ArtCard } from '@/components/ui/ArtCard';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
+import { Section } from '@/components/ui/Section';
 
 /** 状态 → 时间线标记（形状通道：✓ / ● / ○，不只靠颜色） */
 function Marker({ state }: { state: ProgressState }) {
@@ -95,11 +96,17 @@ export function ArtsOverview() {
         </p>
       </header>
 
-      <section aria-labelledby="arts-grid-heading" className="mt-6">
-        <h2 id="arts-grid-heading" className="text-lg font-bold text-text">
-          六门艺
-        </h2>
-        <ul className="mt-3.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <Section
+        className="mt-6"
+        as="div"
+        tone="neutral"
+        variant="plain"
+        icon={Grid3x3}
+        title="六门艺"
+        meta={`${totalDone}/${totalMoves}`}
+        padding="none"
+      >
+        <ul className="m-0 grid list-none grid-cols-1 gap-3 p-4 sm:grid-cols-2">
           {arts.map((art) => {
             const info = stateOf(art.slug);
             return (
@@ -126,19 +133,23 @@ export function ArtsOverview() {
             );
           })}
         </ul>
-      </section>
+      </Section>
 
       {/* 推荐练习顺序（带状态的时间线） */}
-      <section aria-labelledby="arts-order-heading" className="mt-8">
-        <h2 id="arts-order-heading" className="text-lg font-bold text-text">
-          推荐练习顺序
-        </h2>
-        <p className="mt-2.5 max-w-prose text-base leading-[1.75] text-muted">
+      <Section
+        className="mt-4"
+        as="div"
+        tone="guide"
+        variant="outlined"
+        icon={Route}
+        title="推荐练习顺序"
+      >
+        <p className="max-w-prose text-base leading-[1.75] text-muted">
           《囚徒健身》建议按原书顺序逐艺推进：先把一门艺从第 1 式练到第 10 式、
           达到其「进阶标准」后，再进入下一门。不追求同时推进多门，稳扎稳打更重要。
         </p>
 
-        <ol className="mt-4 flex list-none flex-col gap-3 p-0">
+        <ol className="m-0 mt-3.5 flex list-none flex-col gap-3 p-0">
           {arts.map((art, index) => {
             const info = stateOf(art.slug);
             const theme = artTheme(art.slug);
@@ -167,7 +178,7 @@ export function ArtsOverview() {
 
                 <Link
                   to={`/arts/${art.slug}`}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-surface p-3 shadow-card transition-colors hover:border-border-strong"
+                  className="min-w-0 flex-1 rounded-md border border-border bg-surface p-3 transition-colors hover:border-border-strong"
                 >
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-base font-bold text-text">{art.nameZh}</span>
@@ -196,7 +207,7 @@ export function ArtsOverview() {
             );
           })}
         </ol>
-      </section>
+      </Section>
     </main>
   );
 }

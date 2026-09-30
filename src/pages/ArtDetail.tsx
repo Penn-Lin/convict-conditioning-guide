@@ -8,7 +8,7 @@
  * - 顶部提供「继续第 N 式」主 CTA，直接跳到该练的那一式。
  */
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, ChevronRight, Dumbbell, ListChecks, Route } from 'lucide-react';
 import type { Art, ArtSlug } from '@/types';
 import { getAdjacentArts, getArt, getMovesByArt } from '@/data';
 import { moveHref } from '@/lib/slug';
@@ -21,7 +21,7 @@ import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { Button } from '@/components/ui/Button';
 import { MoveCard } from '@/components/ui/MoveCard';
 import { ProgressionPath } from '@/components/ui/ProgressionPath';
-import { Card } from '@/components/ui/Card';
+import { Section } from '@/components/ui/Section';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 
 interface ArtAdjacentNavProps {
@@ -145,8 +145,34 @@ export function ArtDetail() {
         ]}
       />
 
-      {/* 页头 + 进度环 */}
-      <Card className="mt-3" padding="lg">
+      {/* 页头 */}
+      <header className="mt-3">
+        <p className="tnum font-mono text-xs font-semibold text-subtle">
+          第 {art.order} 艺 / 共 {ART_COUNT} 艺
+        </p>
+        <h1 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-text sm:text-3xl">
+          {art.nameZh}
+        </h1>
+        <p lang="en" className="mt-0.5 font-mono text-xs text-subtle">
+          {art.nameEn}
+        </p>
+        <p className="mt-2 text-sm font-semibold text-muted">
+          {allDone
+            ? `${MOVES_PER_ART} 式全部完成`
+            : `当前：第 ${stepNo} 式 ${currentMove?.nameZh ?? ''}`}
+        </p>
+      </header>
+
+      {/* 本门进度（行动语义 = 橙） */}
+      <Section
+        className="mt-4"
+        as="div"
+        tone="action"
+        variant="tinted"
+        icon={Dumbbell}
+        title="本门进度"
+        meta={`${doneCount}/${MOVES_PER_ART}`}
+      >
         <div className="flex items-center gap-4">
           <ProgressRing
             size="lg"
@@ -155,42 +181,33 @@ export function ArtDetail() {
             label={`${art.nameZh}进度`}
             colorClass={theme.text}
           />
-          <div className="min-w-0 flex-1">
-            <p className="tnum font-mono text-xs font-semibold text-subtle">
-              第 {art.order} 艺 / 共 {ART_COUNT} 艺
-            </p>
-            <h1 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-text sm:text-3xl">
-              {art.nameZh}
-            </h1>
-            <p lang="en" className="mt-0.5 font-mono text-xs text-subtle">
-              {art.nameEn}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-muted">
-              {allDone
-                ? `${MOVES_PER_ART} 式全部完成 🎉`
-                : `当前：第 ${stepNo} 式 ${currentMove?.nameZh ?? ''}`}
-            </p>
-          </div>
+          <p className="min-w-0 flex-1 text-sm leading-[1.7] text-text">
+            {allDone
+              ? '这门艺的十式已经全部完成，可以转去推进下一门。'
+              : `按原书方法：先把这一式练到「进阶标准」，勾满进阶条件再进入下一式。`}
+          </p>
         </div>
 
         {!allDone ? (
-          <Button
-            className="mt-4 w-full"
-            size="lg"
-            to={moveHref(slug, stepNo)}
-          >
+          <Button className="mt-4 w-full" size="lg" to={moveHref(slug, stepNo)}>
             {doneCount === 0 ? '从第 1 式开始' : `继续第 ${stepNo} 式`}
             <ChevronRight aria-hidden="true" className="h-4 w-4" />
           </Button>
         ) : null}
-      </Card>
+      </Section>
 
-      {/* 艺介绍 */}
-      <Card className="mt-3.5" padding="lg">
-        <h2 className="text-base font-bold text-text">艺介绍</h2>
-        <p className="mt-2 max-w-prose text-base leading-[1.75] text-text">{art.intro}</p>
+      {/* 艺介绍（知识语义 = 绿） */}
+      <Section
+        className="mt-4"
+        as="div"
+        tone="body"
+        variant="outlined"
+        icon={BookOpen}
+        title="艺介绍"
+      >
+        <p className="max-w-prose text-base leading-[1.75] text-text">{art.intro}</p>
 
-        <h3 className="mt-4 text-sm font-bold text-muted">主要发力肌群</h3>
+        <h3 className="mt-4 text-xs font-bold text-muted">主要发力肌群</h3>
         <ul className="mt-2 flex flex-wrap gap-2">
           {art.muscles.map((muscle) => (
             <li
@@ -201,30 +218,36 @@ export function ArtDetail() {
             </li>
           ))}
         </ul>
-      </Card>
+      </Section>
 
-      {/* 十式进阶路径 */}
-      <Card className="mt-3.5" padding="lg">
-        <h2 className="mb-3 text-base font-bold text-text">十式进阶路径</h2>
+      {/* 十式进阶路径（数据语义 = 蓝） */}
+      <Section
+        className="mt-4"
+        as="div"
+        tone="data"
+        variant="outlined"
+        icon={Route}
+        title="十式进阶路径"
+      >
         <ProgressionPath
           steps={progressionSteps}
           currentStepNo={allDone ? undefined : stepNo}
           ariaLabel="十式进阶阶梯"
         />
-      </Card>
+      </Section>
 
-      {/* 十式列表（进度时间线） */}
-      <section aria-labelledby="art-moves-heading" className="mt-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="art-moves-heading" className="text-lg font-bold text-text">
-            十式列表
-          </h2>
-          <span className="tnum font-mono text-sm font-semibold text-muted">
-            {doneCount}/{MOVES_PER_ART}
-          </span>
-        </div>
-
-        <ul className="mt-3.5 flex flex-col gap-2.5">
+      {/* 十式列表（纯列表 = 中性） */}
+      <Section
+        className="mt-4"
+        as="div"
+        tone="neutral"
+        variant="plain"
+        icon={ListChecks}
+        title="十式列表"
+        meta={`${doneCount}/${MOVES_PER_ART}`}
+        padding="none"
+      >
+        <ul className="m-0 flex list-none flex-col gap-2.5 p-4">
           {moves.map((move) => (
             <li key={move.stepNo}>
               <MoveCard
@@ -241,10 +264,10 @@ export function ArtDetail() {
             </li>
           ))}
         </ul>
-      </section>
+      </Section>
 
       {/* 上一艺 / 下一艺 */}
-      <div className="mt-6">
+      <div className="mt-4">
         <ArtAdjacentNav prev={prev} next={next} />
       </div>
     </main>

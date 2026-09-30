@@ -66,7 +66,10 @@ export function PlanReasonList({
 
   return (
     <section
-      className={['overflow-hidden rounded-lg border border-border bg-surface shadow-card', className]
+      className={[
+        'overflow-hidden rounded-lg border border-violet/40 bg-surface shadow-card',
+        className,
+      ]
         .filter(Boolean)
         .join(' ')}
     >

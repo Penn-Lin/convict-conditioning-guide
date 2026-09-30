@@ -33,16 +33,18 @@
   --text-subtle: 130 130 138; /* #82828A  3.9:1（仅用于 ≥18px 或非关键信息） */
 
   /* ---- 语义色（浅色下均 ≥4.5:1） ---- */
-  --accent: 194 65 12;       /* #C2410C 橙  5.2:1 主行动色 */
-  --success: 21 128 61;      /* #15803D 绿  5.0:1 正确做法 */
+  --accent: 194 65 12;       /* #C2410C 橙  5.2:1 行动 / 今天要做什么 */
+  --success: 21 128 61;      /* #15803D 绿  5.0:1 正确做法 / 要领 */
   --danger: 185 28 28;       /* #B91C1C 红  6.5:1 风险 / 禁忌 */
-  --info: 29 78 216;         /* #1D4ED8 蓝  7.0:1 补充说明 */
+  --info: 29 78 216;         /* #1D4ED8 蓝  7.0:1 数据 / 进度 / 补充说明 */
+  --violet: 109 40 217;      /* #6D28D9 紫  8.1:1 引导 / 新手说明 */
 
   /* ---- 语义淡底（卡片背景，文字仍用深色） ---- */
   --accent-soft: 255 237 213;  /* #FFEDD5 */
   --success-soft: 220 252 231; /* #DCFCE7 */
   --danger-soft: 254 226 226;  /* #FEE2E2 */
   --info-soft: 219 234 254;    /* #DBE4FE */
+  --violet-soft: 237 233 254;  /* #EDE9FE */
 
   /* ---- 难度 5 级 ---- */
   --lv-1: 21 128 61;         /* 入门 #15803D */
@@ -81,11 +83,13 @@
   --success: 74 222 128;     /* #4ADE80 */
   --danger: 248 113 113;     /* #F87171 */
   --info: 96 165 250;        /* #60A5FA */
+  --violet: 192 132 252;     /* #C084FC */
 
   --accent-soft: 60 30 14;
   --success-soft: 18 48 30;
   --danger-soft: 56 24 24;
   --info-soft: 20 36 62;
+  --violet-soft: 42 30 69;
 
   --lv-1: 74 222 128;
   --lv-2: 96 165 250;
@@ -195,4 +199,70 @@
     background-clip: text;
     color: transparent;
   }
+}
+
+/* ===========================================================================
+   底部抽屉 / 弹窗（原生 <dialog>）
+   —— 用原生 `<dialog>` + `showModal()` 而不是自研遮罩层：
+      焦点陷阱、Esc 关闭、`::backdrop`、读屏的模态语义全部免费获得。
+   —— 刻意**不加 `@layer`**：Tailwind 的 UA 预置（`dialog { border: solid; padding: 1em }` 等）
+      在层内，未分层的规则优先级更高，因此这里能稳定覆盖，不必堆 `!important`。
+   —— 移动端从底部滑入（拇指可达）；≥1024px 改为居中，因为鼠标场景下贴底反而远。
+   =========================================================================== */
+dialog.sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 90dvh;
+  padding: 0;
+  border: none;
+  border-radius: 20px 20px 0 0;
+  background-color: rgb(var(--surface));
+  color: rgb(var(--text));
+  box-shadow: 0 -8px 40px rgb(var(--shadow-color) / 0.18);
+  overflow: hidden;
+}
+
+dialog.sheet::backdrop {
+  background-color: rgb(0 0 0 / 0.45);
+}
+
+dialog.sheet[open] {
+  animation: sheet-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 1024px) {
+  dialog.sheet {
+    inset: 0;
+    margin: auto;
+    width: min(560px, calc(100vw - 48px));
+    max-height: 84dvh;
+    border-radius: 20px;
+  }
+  @keyframes sheet-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+/* 抽屉打开时锁住背景滚动（原生 dialog 会阻止交互，但背景仍可滚） */
+body.sheet-open {
+  overflow: hidden;
 }

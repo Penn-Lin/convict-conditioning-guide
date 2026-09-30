@@ -39,6 +39,8 @@ export default {
         'danger-soft': 'rgb(var(--danger-soft) / <alpha-value>)',
         info: 'rgb(var(--info) / <alpha-value>)',
         'info-soft': 'rgb(var(--info-soft) / <alpha-value>)',
+        violet: 'rgb(var(--violet) / <alpha-value>)',
+        'violet-soft': 'rgb(var(--violet-soft) / <alpha-value>)',
         // 难度 5 级（变量随主题切换）
         'lv-1': 'rgb(var(--lv-1) / <alpha-value>)',
         'lv-2': 'rgb(var(--lv-2) / <alpha-value>)',

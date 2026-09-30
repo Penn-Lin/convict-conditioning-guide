@@ -13,7 +13,19 @@
  */
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Target, TriangleAlert } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Dumbbell,
+  LifeBuoy,
+  ListOrdered,
+  Target,
+  TriangleAlert,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { Tone } from '@/lib/tones';
+import { toneStyle } from '@/lib/tones';
 
 import { getMove } from '@/data';
 import type { ResolvedMove } from '@/types';
@@ -63,6 +75,9 @@ interface CollapsibleSectionProps {
   field: string;
   title: string;
   defaultOpen?: boolean;
+  /** 模块色调（见 lib/tones.ts）：不同板块用不同色相与外框区分 */
+  tone?: Tone;
+  icon?: LucideIcon;
   children: ReactNode;
 }
 
@@ -71,17 +86,23 @@ function CollapsibleSection({
   field,
   title,
   defaultOpen = false,
+  tone = 'neutral',
+  icon: Icon,
   children,
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = `${id}-panel`;
   const headingId = `${id}-heading`;
+  const style = toneStyle(tone);
 
   return (
     <section
       id={id}
       data-field={field}
-      className="scroll-mt-24 overflow-hidden rounded-lg border border-border bg-surface shadow-card"
+      className={[
+        'scroll-mt-24 overflow-hidden rounded-lg border bg-surface shadow-card',
+        style.border,
+      ].join(' ')}
     >
       <h2 className="m-0">
         <button
@@ -90,9 +111,22 @@ function CollapsibleSection({
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((prev) => !prev)}
-          className="flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          className="flex min-h-[56px] w-full items-center gap-2.5 px-4 py-3 text-left"
         >
-          <span className="text-base font-bold leading-snug text-text">{title}</span>
+          {Icon ? (
+            <span
+              aria-hidden="true"
+              className={[
+                'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+                style.chip,
+              ].join(' ')}
+            >
+              <Icon className="h-4 w-4" />
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1 text-base font-bold leading-snug text-text">
+            {title}
+          </span>
           <ChevronDown
             aria-hidden="true"
             className={[
@@ -376,7 +410,14 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
       </nav>
 
       <div className="mt-4 flex flex-col gap-3.5">
-        <CollapsibleSection id="steps" field="steps" title="分解步骤" defaultOpen>
+        <CollapsibleSection
+          id="steps"
+          field="steps"
+          title="分解步骤"
+          tone="data"
+          icon={ListOrdered}
+          defaultOpen
+        >
           <StepList
             steps={move.steps}
             hueSoftClass={theme.soft}
@@ -388,6 +429,8 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
           id="key-points"
           field="keyPoints"
           title="要领要点"
+          tone="body"
+          icon={CheckCircle2}
           defaultOpen
         >
           <InfoList variant="success" items={move.keyPoints} />
@@ -397,6 +440,8 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
           id="mistakes"
           field="commonMistakes"
           title="常见错误"
+          tone="risk"
+          icon={TriangleAlert}
           defaultOpen
         >
           <MistakeList items={move.commonMistakes} />
@@ -406,6 +451,8 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
           id="progression"
           field="progressionStandard"
           title="进阶标准原文"
+          tone="neutral"
+          icon={Target}
         >
           <SemanticNote tone="info">
             <RichText
@@ -415,27 +462,49 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
           </SemanticNote>
         </CollapsibleSection>
 
-        {/* 训练目标（常驻展开） */}
+        {/* 训练目标（常驻展开 · 行动语义） */}
         <section
           id="training-goal"
           data-field="trainingGoal"
-          className="scroll-mt-24 rounded-lg border border-border bg-surface p-4 shadow-card"
+          className="scroll-mt-24 overflow-hidden rounded-lg border border-accent/40 bg-surface shadow-card"
         >
-          <h2 className="mb-1 text-base font-bold leading-snug text-text">训练目标</h2>
-          <p className="mb-3 text-sm leading-relaxed text-muted">
-            同一式内的训练量三档 —— 先把量练满，再考虑进入下一式。
-          </p>
-          <TrainingGoalTiers goal={move.trainingGoal} />
+          <header className="flex items-center gap-2.5 border-b border-accent/40 px-4 py-3">
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-bg"
+            >
+              <Target className="h-4 w-4" />
+            </span>
+            <h2 className="flex-1 text-base font-bold leading-snug text-text">训练目标</h2>
+          </header>
+          <div className="p-4">
+            <p className="mb-3 text-sm leading-relaxed text-muted">
+              同一式内的训练量三档 —— 先把量练满，再考虑进入下一式。
+            </p>
+            <TrainingGoalTiers goal={move.trainingGoal} />
+          </div>
         </section>
 
-        <CollapsibleSection id="regression" field="regression" title="太难了怎么办（降阶方案）">
+        <CollapsibleSection
+          id="regression"
+          field="regression"
+          title="太难了怎么办（降阶方案）"
+          tone="guide"
+          icon={LifeBuoy}
+        >
           <RichText
             className="text-base leading-[1.8] text-text"
             text={move.regression}
           />
         </CollapsibleSection>
 
-        <CollapsibleSection id="muscles" field="muscles" title="主要发力肌群">
+        <CollapsibleSection
+          id="muscles"
+          field="muscles"
+          title="主要发力肌群"
+          tone="neutral"
+          icon={Dumbbell}
+        >
           <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
             {move.muscles.map((muscle) => (
               <li

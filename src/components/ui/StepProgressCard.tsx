@@ -13,7 +13,7 @@
  * 2. **确认才推进**：`currentStep` 只由用户点击驱动，永不自动上升 ——
  *    这是「不要每次训练都自动升级」在 UI 上的落点。
  */
-import { Check, ChevronRight, RotateCcw, Trophy } from 'lucide-react';
+import { Check, ChevronRight, ListChecks, RotateCcw, Trophy } from 'lucide-react';
 import type { ProgressionGoal } from '@/lib/checklist';
 import { Checklist, ChecklistProgress } from '@/components/ui/Checklist';
 import { Button } from '@/components/ui/Button';
@@ -67,18 +67,25 @@ export function StepProgressCard({
       id="progression-check"
       aria-labelledby="progression-check-heading"
       className={[
-        'rounded-lg border bg-surface p-4 shadow-card',
-        allDone || completed ? 'border-success/35' : 'border-border',
+        'overflow-hidden rounded-lg border bg-surface shadow-card',
+        allDone || completed ? 'border-success/60' : 'border-success/40',
         className,
       ]
         .filter(Boolean)
         .join(' ')}
     >
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <header className="flex items-start gap-2.5 p-4">
+        <span
+          aria-hidden="true"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-success text-bg"
+        >
+          <ListChecks className="h-4 w-4" />
+        </span>
+
+        <div className="min-w-0 flex-1">
           <h2
             id="progression-check-heading"
-            className="text-lg font-bold leading-snug text-text"
+            className="text-base font-bold leading-snug text-text"
           >
             进阶条件
           </h2>
@@ -95,15 +102,16 @@ export function StepProgressCard({
         ) : null}
       </header>
 
-      <ChecklistProgress className="mt-3.5" checked={checked} total={total} />
+      <div className="px-4 pb-4">
+        <ChecklistProgress checked={checked} total={total} />
 
-      <Checklist
-        className="mt-3.5"
-        label={`${artName}第 ${stepNo} 式进阶条件`}
-        goals={goals}
-        checks={checks}
-        onToggle={onToggle}
-      />
+        <Checklist
+          className="mt-3.5"
+          label={`${artName}第 ${stepNo} 式进阶条件`}
+          goals={goals}
+          checks={checks}
+          onToggle={onToggle}
+        />
 
       {/* 主行动按钮：勾满即点亮；已完成的显示「撤销」 */}
       <div className="mt-4 flex flex-col gap-2">
@@ -160,6 +168,7 @@ export function StepProgressCard({
             )}
           </>
         )}
+      </div>
       </div>
     </section>
   );
