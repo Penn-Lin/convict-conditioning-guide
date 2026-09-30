@@ -54,7 +54,7 @@ export function AdjustSheet({
   resetPlanOptions,
 }: AdjustSheetProps) {
   const excludeSkills = plan.appliedOptions.excludeSkills ?? [];
-  const scale = plan.appliedOptions.volumeScale ?? 1;
+  const delta = plan.appliedOptions.setsDelta ?? 0;
   const override = plan.appliedOptions.volumeTierOverride;
 
   /** 今天实际用到的档位（各门可能不同，取集合用于显示） */
@@ -121,54 +121,66 @@ export function AdjustSheet({
           </div>
         </div>
 
-        {/* ② 训练量 */}
+        {/* ② 训练量微调（±1 组） */}
         <div>
           <p className="text-sm font-bold text-text">训练量</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
-            只调整组数，单组次数由训练量阶梯决定、不轻易改动。
+            在上面的档位基础上，<b>每一项各加减一组</b>。单组次数永远不动
+            （它由原书训练量阶梯决定）。想粗调就用档位，想细调就用这里。
           </p>
           <div className="mt-2.5 grid grid-cols-3 gap-2">
             <button
               type="button"
-              disabled={scale <= 0.6}
-              onClick={() => patchPlan({ volumeScale: 0.6 })}
+              disabled={delta <= -1}
+              onClick={() => patchPlan({ setsDelta: -1 })}
               className={[
-                'flex min-h-[52px] items-center justify-center gap-1 rounded-md border text-sm font-bold transition-colors disabled:opacity-40',
-                scale === 0.6
+                'flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-bold transition-colors disabled:opacity-40',
+                delta === -1
                   ? 'border-accent bg-accent text-bg'
                   : 'border-border-strong bg-surface text-text hover:border-accent',
               ].join(' ')}
             >
-              <Minus aria-hidden="true" className="h-4 w-4" />
-              减少
+              <span className="flex items-center gap-1">
+                <Minus aria-hidden="true" className="h-4 w-4" />
+                减一组
+              </span>
+              <span className="text-[11px] font-semibold opacity-80">组数 −1</span>
             </button>
             <button
               type="button"
-              onClick={() => patchPlan({ volumeScale: 1 })}
+              onClick={() => patchPlan({ setsDelta: 0 })}
               className={[
-                'min-h-[52px] rounded-md border text-sm font-bold transition-colors',
-                scale === 1
+                'flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-bold transition-colors',
+                delta === 0
                   ? 'border-accent bg-accent text-bg'
                   : 'border-border-strong bg-surface text-text hover:border-accent',
               ].join(' ')}
             >
-              默认
+              <span>档位标准</span>
+              <span className="text-[11px] font-semibold opacity-80">不加不减</span>
             </button>
             <button
               type="button"
-              disabled={scale >= 1.2}
-              onClick={() => patchPlan({ volumeScale: 1.2 })}
+              disabled={delta >= 1}
+              onClick={() => patchPlan({ setsDelta: 1 })}
               className={[
-                'flex min-h-[52px] items-center justify-center gap-1 rounded-md border text-sm font-bold transition-colors disabled:opacity-40',
-                scale === 1.2
+                'flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-bold transition-colors disabled:opacity-40',
+                delta === 1
                   ? 'border-accent bg-accent text-bg'
                   : 'border-border-strong bg-surface text-text hover:border-accent',
               ].join(' ')}
             >
-              <Plus aria-hidden="true" className="h-4 w-4" />
-              增加
+              <span className="flex items-center gap-1">
+                <Plus aria-hidden="true" className="h-4 w-4" />
+                加一组
+              </span>
+              <span className="text-[11px] font-semibold opacity-80">组数 +1</span>
             </button>
           </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            上限 4 组（原书：「三组甚至四组也可以接受」）。要真正提升训练量，
+            更该做的是把<b>档位</b>往上调一档，或干脆用更长的时间档。
+          </p>
         </div>
 
         {/* ③ 今天的训练量档 —— 三选一 + 自动 */}

@@ -311,9 +311,10 @@ export type ExclusionCode =
 /** 用户对计划的主动修改（唯一生成入口的参数） */
 export interface PlanOptions {
   availableMinutes?: 15 | 30 | 45 | 60;   // 今天的实际时间
+  volumeTierOverride?: number;            // 今天的训练量档 0/1/2（当天有效）
+  setsDelta?: -1 | 0 | 1;                 // 每项组数 ±1 的微调
   excludeSkills?: ArtSlug[];              // 今天不练（软排除，仅当天）
   onlySkills?: ArtSlug[];                 // 今天只想练这些
-  volumeScale?: number;                   // 0.6 / 0.8 / 1.0 / 1.2 整体增减量
   avoidMain?: ArtSlug;                    // 「换一个方案」：排除当前主训后重算
   today?: string;                         // 'YYYY-MM-DD'，引擎不取系统时间
   forceKind?: 'training' | 'recovery';
@@ -749,8 +750,18 @@ maxItemsAdjust = avgFatigue >= 4.0 ? −1 : 0
 | 45 min | 6.7 | 26.8 | 42.8 |
 | 60 min | 8.4 | 33.7 | 53.7 |
 
-`volumeScale`（用户点「减少训练量 / 增加训练量」）：`0.6 / 1.0 / 1.2`，作用于**组数**
-（`sets = max(1, round(sets × scale))`），不作用于单组次数（次数由阶梯决定，不轻易动）。
+`setsDelta`（用户点「减一组 / 加一组」）：`-1 / 0 / 1`，在**今天的档位基础上**给每一项加减一组，
+不作用于单组次数（次数由阶梯决定，不轻易动）。
+
+> ⚠️ **2026-09-30 二次修正**：这里原来是 `volumeScale`（`0.6 / 1.0 / 1.2`，乘组数）。
+> 它是坏的 —— 全站阶梯的组数只有 **1 / 2 / 3** 三种取值，
+> `Math.round(2 × 1.2) === 2`，所以「增加训练量」对 1 组和 2 组的项目**完全无效**：
+> 用户点完看不出任何变化（只有 3 组的情况会变成 4 组），实测四个时间档下
+> 「增加」与「默认」产出的计划逐字相同。改成加减法后必然生效，
+> 语义也更好解释：「比今天档位多一组」。
+>
+> 上限 4 组，依据原书第十一章「如果为了适应、完善动作，**三组甚至四组也可以接受**」。
+> 辅助项的微调上限是「辅助组数上限 + 1」（15 分钟档 2 组、其余 3 组）。
 
 ### 7.5 耗时估算
 
@@ -918,8 +929,9 @@ function isProgressionReady(snap, state, cfg): boolean {
 |---|---|---|
 | 今天不想练 X | `excludeSkills = [...prev, X]` | X 从候选池移除；其余项目**重新打分**，不会随机换 |
 | 换一个方案 | `avoidMain = 当前 main` | 当前主训被排除，取分数次高者为主训（**确定性**） |
-| 减少训练量 | `volumeScale = 0.6`（或 0.8） | 组数按比例缩减，主训项数不变 |
-| 增加训练量 | `volumeScale = 1.2` | 组数增加，但仍受 `maxItems` 与阶梯上限约束 |
+| 减少训练量 | `setsDelta = -1` | 每项各减 1 组（最少 1 组），项数不变 |
+| 增加训练量 | `setsDelta = 1` | 每项各加 1 组（最多 4 组；辅助最多为上限 +1） |
+| 指定今日档位 | `volumeTierOverride = 0 / 1 / 2` | 覆盖 `effectiveTier` 的自动取值，仍受阶梯档数上限约束 |
 | 今天只想练某类 | `onlySkills = ['pushups','leg-raises']` | 白名单过滤后重算 |
 | 改时间 | `availableMinutes = 15` | 项数 / 休息 / 组数上限整体重算 |
 

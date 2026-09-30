@@ -265,7 +265,7 @@ export function generateDailyPlan(
   // ⑧ 组装计划项
   const buildCtx = {
     minutes: ctx.minutes,
-    volumeScale: options.volumeScale ?? 1,
+    setsDelta: options.setsDelta ?? 0,
     skills: state.skills,
     tierFloor: MINUTE_BUDGET[ctx.minutes].tierFloor,
     tierOverride: options.volumeTierOverride,
@@ -363,7 +363,7 @@ export function generateDailyPlan(
  * |---|---|
  * | 今天不想练 X | `excludeSkills = [...prev, X]` |
  * | 换一个方案 | `avoidMain = 当前 main`（内部转为 excludeSkills） |
- * | 减少 / 增加训练量 | `volumeScale = 0.6 / 0.8 / 1.2` |
+ * | 减少 / 增加训练量 | `setsDelta = -1 / 1`（每项组数 ±1） |
  * | 今天只想练某类 | `onlySkills = [...]` |
  * | 改时间 | `availableMinutes = 15` |
  *

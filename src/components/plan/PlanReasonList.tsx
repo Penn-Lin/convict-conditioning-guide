@@ -29,7 +29,7 @@ const CODE_TONE: Partial<Record<ReasonCode, NoteTone>> = {
   WEEK_DEFICIT: 'info',
   USER_EXCLUDE: 'info',
   USER_ONLY: 'info',
-  VOLUME_SCALE: 'info',
+  SETS_DELTA: 'info',
   TIER_FLOOR: 'info',
   PROGRESSION_READY: 'good',
   RECOVERY_DAY: 'info',

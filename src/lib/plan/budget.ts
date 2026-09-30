@@ -22,6 +22,7 @@ import {
   ESTIMATE,
   ITEM_SUPPRESSION,
   MAX_ITEMS_CAP,
+  MAX_SETS_PER_ITEM,
   MINUTE_BUDGET,
   OVERLAP,
   WEEK_PLAN,
@@ -106,7 +107,8 @@ function nameOf(artSlug: ArtSlug, stepNo: number): { nameZh: string; nameEn: str
 /** 组装单个计划项的公共上下文 */
 interface BuildItemContext {
   minutes: SessionMinutes;
-  volumeScale: number;
+  /** 组数微调（−1 / 0 / +1） */
+  setsDelta: number;
   skills: Record<ArtSlug, TrainingSkill>;
   /** 今日训练量档下限（由时间档给出） */
   tierFloor: number;
@@ -155,9 +157,21 @@ function effectiveTier(
   return Math.min(maxTier, Math.max(base, effectiveFloor));
 }
 
-/** 组数缩放（`volumeScale` 只作用于组数，不轻易动单组次数） */
-function scaleSets(sets: number, scale: number): number {
-  return Math.max(1, Math.round(sets * scale));
+/**
+ * 组数微调（`setsDelta` = −1 / 0 / +1）。
+ *
+ * **刻意用加减法而不是乘法。** 全站阶梯的组数只有 1 / 2 / 3 三种取值，
+ * 早先的 `Math.round(sets × 1.2)` 对 1 组和 2 组都会圆回原值 ——
+ * 用户点「增加训练量」看不出任何变化（只有 3 组的情况会变成 4 组）。
+ * 加减法在小整数上必然生效，语义也更好解释：「比今天档位多一组」。
+ *
+ * @param sets 今天档位算出的基准组数（主训 = 档位组数；辅助 = 已受上限约束的组数）
+ * @param delta 用户微调
+ * @param max 该角色的组数上限（主训 4 组；辅助 = 辅助组数上限 + 1）
+ */
+function adjustSets(sets: number, delta: number, max: number): number {
+  const base = Math.max(1, sets);
+  return Math.min(Math.max(1, max), Math.max(1, base + Math.round(delta)));
 }
 
 /**
@@ -175,7 +189,7 @@ export function buildMainItem(
   const tierIndex = effectiveTier(snapshot, ctx.skills, ctx.tierFloor, ctx.tierOverride);
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
-  const sets = scaleSets(tier.sets, ctx.volumeScale);
+  const sets = adjustSets(tier.sets, ctx.setsDelta, MAX_SETS_PER_ITEM);
   const { nameZh, nameEn } = nameOf(snapshot.slug, snapshot.currentStep);
 
   return {
@@ -217,9 +231,12 @@ export function buildAssistItem(
   const tierIndex = effectiveTier(snapshot, ctx.skills, ctx.tierFloor, ctx.tierOverride);
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
-  const sets = scaleSets(
+  // 辅助仍先受「辅助组数上限」约束（15 分钟档 1 组、其余 2 组），
+  // 再套用用户微调 —— 微调时允许比常规上限多 1 组（用户明确要求加量）。
+  const sets = adjustSets(
     Math.min(tier.sets, budget.assistSetCap),
-    ctx.volumeScale,
+    ctx.setsDelta,
+    budget.assistSetCap + 1,
   );
   const { nameZh, nameEn } = nameOf(snapshot.slug, snapshot.currentStep);
 

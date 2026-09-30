@@ -147,17 +147,30 @@ export function saveStore(store: TrainingStore): void {
 }
 
 /**
+ * 认识的历史版本号（从旧到新）。
+ *
+ * **每加一个版本都要往这里追加**，否则老用户的数据会因为「版本不认识」
+ * 被整份丢弃 —— 那等于把人练了几个月的东西一次抹掉，是不可接受的失败方式。
+ */
+const KNOWN_VERSIONS: readonly number[] = [1, 2, 3];
+
+/**
  * 结构迁移与补全。
  *
  * 容错重点：任何字段缺失都要补上，让「旧数据 + 新版本代码」也能正常工作，
  * 而不是整份丢弃让用户白练。
+ *
+ * ## 版本历史
+ * - **v1 → v2**：`DailyPlan` 新增热身 / 放松分钟数与训练量档覆盖字段。
+ * - **v2 → v3**：训练量微调从 `volumeScale`（乘组数）改为 `setsDelta`（±1 组）。
+ *   乘法的旧字段会被忽略，故旧版固化的今日计划直接丢弃。
+ *
+ * 两版的共同处理：**今天已固化的计划一律丢弃**（次日按日重算，零损失），
+ * 训练历史与六艺进度**全部保留**。
  */
 export function migrate(input: Partial<TrainingStore>): TrainingStore {
   const base = createEmptyStore();
-  // v1 → v2：`DailyPlan` 新增了热身 / 放松分钟数与训练量档覆盖字段，
-  // 旧版固化的今日计划缺这些字段，直接丢弃（次日按日重算，无任何损失）；
-  // 训练历史与六艺进度**全部保留** —— 不能因为加个字段就抹掉用户练过的东西。
-  if (input.version !== 1 && input.version !== STORAGE_VERSION) {
+  if (typeof input.version !== 'number' || !KNOWN_VERSIONS.includes(input.version)) {
     return base;
   }
 

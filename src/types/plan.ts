@@ -219,7 +219,7 @@ export type ReasonCode =
   | 'WEEK_DEFICIT'
   | 'USER_EXCLUDE'
   | 'USER_ONLY'
-  | 'VOLUME_SCALE'
+  | 'SETS_DELTA'
   | 'TIER_FLOOR'
   | 'PROGRESSION_READY'
   | 'RECOVERY_DAY'
@@ -267,6 +267,9 @@ export interface PriorityBreakdown {
   }[];
 }
 
+/** 组数微调：比今天档位少一组 / 不变 / 多一组 */
+export type SetsDelta = -1 | 0 | 1;
+
 /** 用户对计划的主动修改 —— 所有计划变体的唯一入参 */
 export interface PlanOptions {
   /** 今天的实际可用时间 */
@@ -280,12 +283,21 @@ export interface PlanOptions {
    * 练完仍按完成度判定，做不到会被软降量，长期状态不会被污染。
    */
   volumeTierOverride?: number;
+  /**
+   * 在今天档位的基础上，**每项各组数加减一组**（`-1` 减 / `0` 不变 / `1` 加）。
+   *
+   * 为什么是加减法而不是原来的乘法（`volumeScale: 1.2`）：
+   * 全站训练量阶梯的组数只有 **1 / 2 / 3** 三种取值，`Math.round(2 × 1.2) === 2`
+   * ——「增加训练量」对 1 组和 2 组的项目**完全无效**，用户点了看不出任何变化。
+   * 加减法在小整数上一定生效，且语义更好解释：「比今天档位多一组」。
+   *
+   * 上限依据原书第十一章：「三组甚至四组也可以接受」，故单次训练量上限为 **4 组**。
+   */
+  setsDelta?: SetsDelta;
   /** 今天不练（软排除，仅影响当天，不写回长期状态） */
   excludeSkills?: ArtSlug[];
   /** 今天只想练这些（白名单） */
   onlySkills?: ArtSlug[];
-  /** 整体训练量缩放：0.6 / 0.8 / 1.0 / 1.2，只作用于组数 */
-  volumeScale?: number;
   /** 「换一个方案」：排除当前主训后重算（确定性，非随机） */
   avoidMain?: ArtSlug;
   /** 'YYYY-MM-DD'；引擎**不取系统时间**，一律由调用方传入 */

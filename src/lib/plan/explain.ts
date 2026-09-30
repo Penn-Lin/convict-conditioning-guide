@@ -196,15 +196,15 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
       values: { only: only.join(',') },
     });
   }
-  const scale = options.volumeScale ?? 1;
-  if (scale !== 1) {
+  const delta = options.setsDelta ?? 0;
+  if (delta !== 0) {
     reasons.push({
-      code: 'VOLUME_SCALE',
+      code: 'SETS_DELTA',
       text:
-        scale < 1
-          ? `已按你的要求减少训练量：组数按 ${Math.round(scale * 100)}% 缩减，单组次数由训练量阶梯决定、不轻易改动。`
-          : `已按你的要求增加训练量：组数按 ${Math.round(scale * 100)}% 增加，仍受项数上限与阶梯约束。`,
-      values: { volumeScale: scale },
+        delta > 0
+          ? `已按你的要求增加训练量：每一项在今天的档位基础上各加 1 组，单组次数不变（仍由训练量阶梯决定）。单次最多 4 组。`
+          : `已按你的要求减少训练量：每一项在今天的档位基础上各减 1 组，最少保留 1 组；单组次数不变。`,
+      values: { setsDelta: delta },
     });
   }
 

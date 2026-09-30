@@ -374,12 +374,44 @@ describe('replan · §10.8–10.9 用户主动修改', () => {
     expect(switched.main?.volumeTier).toBe(1); // 回到 15 分钟档的底线
   });
 
-  it('减少训练量只作用于组数，不动单组次数', () => {
+  it('训练量微调：±1 组一定生效，且不动单组次数', () => {
     const base = generateDailyPlan(state, { today: TODAY });
-    const next = replan(state, base, { volumeScale: 0.6 });
-    expect(next.main?.targetPerSet).toBe(base.main?.targetPerSet);
-    expect(next.main?.sets).toBeLessThanOrEqual(base.main?.sets ?? 0);
-    expect(next.reasons.some((reason) => reason.code === 'VOLUME_SCALE')).toBe(true);
+
+    const less = replan(state, base, { setsDelta: -1 });
+    expect(less.main?.sets).toBe((base.main?.sets ?? 0) - 1);
+    expect(less.main?.targetPerSet).toBe(base.main?.targetPerSet);
+    expect(less.reasons.some((reason) => reason.code === 'SETS_DELTA')).toBe(true);
+
+    const more = replan(state, base, { setsDelta: 1 });
+    expect(more.main?.sets).toBe((base.main?.sets ?? 0) + 1);
+    expect(more.main?.targetPerSet).toBe(base.main?.targetPerSet);
+    // 估算时长必须跟着变 —— 这正是旧实现（×1.2 被四舍五入圆回）失败的地方
+    expect(more.totalEstimatedMinutes).toBeGreaterThan(base.totalEstimatedMinutes);
+  });
+
+  it('训练量微调不越界：最少 1 组、最多 4 组（原书「三组甚至四组也可以接受」）', () => {
+    const base = generateDailyPlan(state, { today: TODAY });
+
+    const floored = replan(state, base, { setsDelta: -1 });
+    for (const item of [floored.main, ...floored.assists]) {
+      expect(item?.sets ?? 1).toBeGreaterThanOrEqual(1);
+    }
+
+    // 先手动指定升阶档（主训 3 组）再加一组 → 4 组，不会更高
+    const top = replan(state, base, { volumeTierOverride: 2, setsDelta: 1 });
+    expect(top.main?.sets).toBe(4);
+    for (const item of top.assists) {
+      expect(item.sets).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('旧实现回归守卫：组数 1 / 2 / 3 全部能被 ±1 改变（乘法会把 1 和 2 圆回去）', () => {
+    const base = generateDailyPlan(state, { today: TODAY, volumeTierOverride: 0 });
+    expect(base.main?.volumeTier).toBe(0);
+    expect(base.main?.sets).toBe(1);
+
+    const more = replan(state, base, { volumeTierOverride: 0, setsDelta: 1 });
+    expect(more.main?.sets).toBe(2); // 旧实现：round(1 × 1.2) = 1，纹丝不动
   });
 
   it('确定性：同 state + 同 options 必然同结果（无 Math.random）', () => {
@@ -655,17 +687,34 @@ describe('storage · v1 → v2 迁移不丢数据', () => {
 
     const out = migrate(v1 as Parameters<typeof migrate>[0]);
 
-    expect(out.version).toBe(2);
+    expect(out.version).toBe(3);
     expect(out.sessions).toHaveLength(1);
     expect(out.skills.pushups.currentStep).toBe(4);
     expect(out.skills.pushups.lastTrainedAt).toBe('2026-09-29T12:00:00');
     expect(out.todayPlan).toBeNull();
   });
 
+  it('v2 存档也能升级（不能因为版本号变了就把人练过的全丢掉）', async () => {
+    const { migrate } = await import('./storage');
+    const v2 = {
+      version: 2,
+      profile: null,
+      skills: { squats: { ...skill('squats', 3, 1), lastTrainedAt: '2026-09-28T12:00:00' } },
+      sessions: [doneSession('2026-09-28', 'squats')],
+      todayPlan: { date: '2026-09-30' },
+    };
+
+    const out = migrate(v2 as unknown as Parameters<typeof migrate>[0]);
+    expect(out.version).toBe(3);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.skills.squats.currentStep).toBe(3);
+    expect(out.todayPlan).toBeNull();
+  });
+
   it('完全无法识别的版本安全降级为空状态，不抛异常', async () => {
     const { migrate } = await import('./storage');
     const out = migrate({ version: 99 } as unknown as Parameters<typeof migrate>[0]);
-    expect(out.version).toBe(2);
+    expect(out.version).toBe(3);
     expect(out.sessions).toEqual([]);
     expect(out.profile).toBeNull();
   });
