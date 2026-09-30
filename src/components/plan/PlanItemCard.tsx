@@ -5,8 +5,8 @@
  * 训练现场需要的是前两项，第三项是给「不服气」的时刻看的（可折叠）。
  */
 import { Link } from 'react-router-dom';
-import { ChevronRight, Circle, Layers, Rocket, Star } from 'lucide-react';
-import type { PlanItem } from '@/types/plan';
+import { ChevronRight, Circle, Layers, Rocket, Star, Target } from 'lucide-react';
+import type { PlanItem, ScheduleMode } from '@/types/plan';
 import { getArt } from '@/data';
 import { moveHref } from '@/lib/slug';
 import { artTheme } from '@/lib/artTheme';
@@ -14,11 +14,31 @@ import { tierLabel } from '@/lib/plan/config';
 import { formatSeconds, formatVolume } from '@/lib/plan/volumeLadder';
 import { RichText } from '@/components/ui/RichText';
 
-/** 角色 → 徽章文案与图标 */
+/** 角色 → 徽章文案与图标（自动调度模式） */
 const ROLE_META = {
   main: { label: '主训练', Icon: Star, className: 'bg-accent text-bg' },
   assist: { label: '辅助训练', Icon: Circle, className: 'bg-surface2 text-muted' },
   optional: { label: '加练自选', Icon: Rocket, className: 'bg-info-soft text-info' },
+} as const;
+
+/**
+ * 原书模板模式下的角色徽章。
+ *
+ * 六门是**平级科目** —— 组数、组间休息、训练量档上限全部一致，
+ * 唯一的差别是「先做哪一门」（体力最好时做最难的）。
+ * 所以这里不写「主 / 辅」，只表达顺序：写「辅助训练」会暗示量级差异，而那个差异并不存在。
+ */
+const TEXTBOOK_ROLE_META = {
+  main: { label: '先练这门', Icon: Star, className: 'bg-accent text-bg' },
+  assist: { label: '随后', Icon: Circle, className: 'bg-surface2 text-muted' },
+  optional: { label: '加练自选', Icon: Rocket, className: 'bg-info-soft text-info' },
+} as const;
+
+/** 进阶测试项：与角色无关，单独一套徽章（它是「今天为什么练这么多」的答案） */
+const CHALLENGE_META = {
+  label: '进阶测试',
+  Icon: Target,
+  className: 'bg-violet text-bg',
 } as const;
 
 /** `PlanItemCard` 的 props */
@@ -26,6 +46,8 @@ export interface PlanItemCardProps {
   item: PlanItem;
   /** 在计划中的序号（1 = 主训） */
   index: number;
+  /** 当前排期模式 —— 决定角色徽章的措辞（模板模式下六门平级，不写「主 / 辅」） */
+  mode?: ScheduleMode;
   className?: string;
 }
 
@@ -35,10 +57,16 @@ export interface PlanItemCardProps {
  * @example
  * <PlanItemCard item={plan.main} index={1} />
  */
-export function PlanItemCard({ item, index, className = '' }: PlanItemCardProps) {
+export function PlanItemCard({
+  item,
+  index,
+  mode = 'auto',
+  className = '',
+}: PlanItemCardProps) {
   const art = getArt(item.skill);
   const theme = artTheme(item.skill);
-  const meta = ROLE_META[item.role];
+  const roleMeta = mode === 'auto' ? ROLE_META : TEXTBOOK_ROLE_META;
+  const meta = item.challenge ? CHALLENGE_META : roleMeta[item.role];
   const { Icon } = meta;
   const isMain = item.role === 'main';
 

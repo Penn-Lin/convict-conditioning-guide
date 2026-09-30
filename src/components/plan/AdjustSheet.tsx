@@ -9,7 +9,7 @@
  * 这样「它们是一组」的联系由形状承担，颜色只负责回答「这是哪一个」。
  * 时间档四项同形同色（action 橙）；六艺 chips 同形但各带本门色相（标识是哪门艺）。
  */
-import { CalendarRange, Layers, Minus, Plus, RefreshCw, RotateCcw, Sparkles, Timer } from 'lucide-react';
+import { CalendarRange, Layers, Minus, Plus, RefreshCw, RotateCcw, Sparkles, Target, Timer } from 'lucide-react';
 import type { ArtSlug } from '@/types';
 import type { DailyPlan, PlanOptions, ScheduleMode, SessionMinutes } from '@/types/plan';
 import { ART_ORDER } from '@/lib/constants';
@@ -85,6 +85,7 @@ export function AdjustSheet({
   const excludeSkills = plan.appliedOptions.excludeSkills ?? [];
   const delta = plan.appliedOptions.setsDelta ?? 0;
   const override = plan.appliedOptions.volumeTierOverride;
+  const challenges = plan.appliedOptions.challengeSkills ?? [];
 
   /** 今天实际用到的档位（各门可能不同，取集合用于显示） */
   const activeTiers = Array.from(
@@ -326,7 +327,54 @@ export function AdjustSheet({
           ) : null}
         </div>
 
-        {/* ⑤ 今天不想练哪门 —— 平级 chips，各带本门色相 */}
+        {/* ⑤ 进阶测试 —— 逐门点选，按原书高级标准排一次真量 */}
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-bold text-text">
+            <Target aria-hidden="true" className="h-4 w-4 text-violet" />
+            进阶测试
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            「能不能进下一式」的判据是原书的<b>高级标准</b>（比如 3 组 × 50 次），
+            而日常计划只排中级档（2 组 × 25 次）—— 中间差着一段，光靠感觉勾条件是不作数的。
+            点选一门，今天它按高级标准排一次真量（<b>不受时间档限制</b>），做完就知道够不够格。
+          </p>
+          <ul className="m-0 mt-2.5 grid list-none grid-cols-3 gap-2 p-0">
+            {ART_ORDER.map((slug) => {
+              const art = getArt(slug);
+              const active = challenges.includes(slug);
+              return (
+                <li key={slug}>
+                  <button
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() =>
+                      patchPlan({
+                        challengeSkills: active
+                          ? challenges.filter((item) => item !== slug)
+                          : [...challenges, slug],
+                      })
+                    }
+                    className={[
+                      'flex min-h-[46px] w-full items-center justify-center rounded-md border px-1 text-sm font-bold transition-colors',
+                      active
+                        ? 'border-violet bg-violet text-bg'
+                        : 'border-border-strong bg-surface text-text hover:border-violet',
+                    ].join(' ')}
+                  >
+                    {art?.nameZh ?? slug}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            {challenges.length === 0
+              ? '不选就是照常练。想测哪门就点哪门 —— 一次测一门比较稳，同时测好几门会很累。'
+              : `已选 ${challenges.length} 门。做完去「记录这次训练」，条件勾满即可进入下一式；没做到只记当天，长期进度不受影响。`}
+          </p>
+        </div>
+
+        {/* ⑥ 今天不想练哪门 —— 平级 chips，各带本门色相 */}
         <div>
           <p className="text-sm font-bold text-text">今天不想练哪门？</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
@@ -364,7 +412,7 @@ export function AdjustSheet({
           </ul>
         </div>
 
-        {/* ⑥ 其他操作 */}
+        {/* ⑦ 其他操作 */}
         <div className="flex flex-col gap-2.5 border-t border-border pt-5">
           {plan.main ? (
             <Button

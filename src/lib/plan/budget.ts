@@ -147,6 +147,17 @@ interface BuildItemContext {
    * 注意优先级：用户手动指定的 `tierOverride` **不受**此上限约束（那是明确要求）。
    */
   tierCeiling?: number;
+  /**
+   * 今天要做**进阶测试**的科目集合。
+   *
+   * 命中的门直接取该式的**最高档**（= 原书「高级标准」= `progressionStandard`
+   * 逗号前的数量目标），且**不受 `tierCeiling` 与 `tierFloor` 影响** ——
+   * 这是用户明确要求的一次挑战，时间档与长期进度都不该拦它。
+   *
+   * 优先级排在「软降量」之后：上次完成度崩过的门仍然先降量，
+   * 不允许用「我要测试」绕过安全阀。
+   */
+  challengeSkills?: ReadonlySet<ArtSlug>;
 }
 
 /**
@@ -166,6 +177,9 @@ interface BuildItemContext {
  * 依据原书第十一章「慢工出细活」——「我总是建议新手：不管你多强，都要从第一个动作开始……
  * 给自己留出至少四周的时间」。原书的路线本就是「先用初级标准起步，很快过渡到两组」，
  * 而不是一上手就按升阶标准（3 组）去冲。
+ *
+ * **进阶测试（`challengeSkills`）** 插在软降量之后、手动档位之前，
+ * 直接返回该式最高档，且不受上限/下限约束 —— 见 `BuildItemContext.challengeSkills`。
  */
 function effectiveTier(
   snapshot: SkillSnapshot,
@@ -173,12 +187,15 @@ function effectiveTier(
   tierFloor: number,
   tierOverride?: number,
   tierCeiling?: number,
+  challengeSkills?: ReadonlySet<ArtSlug>,
 ): number {
   const skill = skills[snapshot.slug];
   const maxTier = Math.max(0, snapshot.ladder.length - 1);
   const base = Math.min(snapshot.volumeTier, maxTier);
 
   if (skill.softDowngrade) return Math.max(0, base - 1);
+  // 进阶测试：按原书高级标准（该式最高档）来一次，时间档与长期进度都让路
+  if (challengeSkills?.has(snapshot.slug)) return maxTier;
   if (tierOverride !== undefined) {
     return Math.min(maxTier, Math.max(0, Math.round(tierOverride)));
   }
@@ -232,6 +249,7 @@ export function buildMainItem(
     ctx.tierFloor,
     ctx.tierOverride,
     ctx.tierCeiling,
+    ctx.challengeSkills,
   );
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
@@ -248,6 +266,7 @@ export function buildMainItem(
     volumeTier: tierIndex,
     sets,
     targetPerSet: tier.perSet,
+    challenge: ctx.challengeSkills?.has(snapshot.slug) || undefined,
     restSeconds: budget.restSeconds,
     estimatedMinutes: estimateMinutes(
       snapshot.slug,
@@ -274,18 +293,22 @@ export function buildAssistItem(
 ): PlanItem {
   const budget = MINUTE_BUDGET[ctx.minutes];
   const { snapshot } = candidate;
+  const isChallenge = ctx.challengeSkills?.has(snapshot.slug) ?? false;
   const tierIndex = effectiveTier(
     snapshot,
     ctx.skills,
     ctx.tierFloor,
     ctx.tierOverride,
     ctx.tierCeiling,
+    ctx.challengeSkills,
   );
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
   // 辅助仍先受「辅助组数上限」约束（15 分钟档 1 组、其余 2 组，模板模式可被放开），
   // 再套用用户微调 —— 微调时允许比常规上限多 1 组（用户明确要求加量）。
-  const cap = ctx.assistSetCap ?? budget.assistSetCap;
+  // **进阶测试项豁免这个上限**：它要做的正是「原书高级标准」那个量，
+  // 被压到 1–2 组就不是测试了。
+  const cap = isChallenge ? MAX_SETS_PER_ITEM : (ctx.assistSetCap ?? budget.assistSetCap);
   const sets = adjustSets(
     Math.min(tier.sets, cap),
     ctx.setsDelta,
@@ -304,6 +327,7 @@ export function buildAssistItem(
     volumeTier: tierIndex,
     sets,
     targetPerSet: tier.perSet,
+    challenge: isChallenge || undefined,
     restSeconds,
     estimatedMinutes: estimateMinutes(
       snapshot.slug,

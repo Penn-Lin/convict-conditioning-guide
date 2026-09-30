@@ -316,6 +316,23 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
     });
   }
 
+  // ④b 晋级就绪 —— **六门都要报**，不只是主训。
+  //
+  // 「什么时候能进下一式」是用户最关心的问题之一，而它只在达到「该式最高档 + 连续达标」
+  // 时才成立。只报主训等于告诉用户「除了今天排第一的那门，别的门你都不知道够了没有」。
+  for (const { candidate } of assists) {
+    if (!candidate.snapshot.progressionReady || !candidate.snapshot.progressionHint) continue;
+    reasons.push({
+      skill: candidate.snapshot.slug,
+      code: 'PROGRESSION_READY',
+      text: candidate.snapshot.progressionHint,
+      values: {
+        stepNo: candidate.snapshot.currentStep,
+        tier: candidate.snapshot.volumeTier,
+      },
+    });
+  }
+
   // ⑤ 时间与项数
   const countBits: string[] = [`时间限制为 ${minutes} 分钟`];
   if (countDecision.fatigueReduce > 0) {

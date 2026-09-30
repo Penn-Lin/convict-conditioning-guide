@@ -828,6 +828,51 @@ describe('textbook · 原书模板的科目解析', () => {
     ).toBeLessThanOrEqual(15);
   });
 
+  it('进阶测试：被点名的门按原书高级标准排量，其他门一点不受影响', () => {
+    const state = stateTrainedDaysAgo(2, 45);
+    const plan = generateDailyPlan(state, { today: TODAY, challengeSkills: ['pushups'] });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+
+    const pushups = all.find((item) => item.skill === 'pushups');
+    expect(pushups?.challenge).toBe(true);
+    // 俯卧撑第 1 式的最高档 = 原书高级标准
+    expect(pushups?.volumeTier).toBe(2);
+
+    // 其余五门保持中级档，不会跟着一起上量
+    for (const item of all) {
+      if (item.skill === 'pushups') continue;
+      expect(item.volumeTier).toBe(1);
+      expect(item.challenge).toBeUndefined();
+    }
+  });
+
+  it('进阶测试项不参与「装不装得进时间档」的判定', () => {
+    // 回归防线：30 分钟档恰好装下「六门 × 中级档」。
+    // 若把进阶测试项算进时长判定，会连累其余五门一起退到初级档 ——
+    // 为了测一门而牺牲整天训练量，本末倒置。
+    const state = stateTrainedDaysAgo(2, 30);
+    const plan = generateDailyPlan(state, { today: TODAY, challengeSkills: ['pullups'] });
+    const others = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null && !item.challenge,
+    );
+
+    expect(others).toHaveLength(5);
+    expect(others.every((item) => item.volumeTier === 1)).toBe(true);
+  });
+
+  it('进阶测试项豁免「辅助组数上限」', () => {
+    // 15 分钟档的辅助组数上限是 1 组；挑战项要做的正是原书高级标准那个量，
+    // 被压到 1 组就不叫测试了。这里用「坐姿屈膝」之外的举腿验证。
+    const state = stateTrainedDaysAgo(2, 15);
+    const plan = generateDailyPlan(state, { today: TODAY, challengeSkills: ['bridges'] });
+    const bridges = [plan.main, ...plan.assists].find((item) => item?.skill === 'bridges');
+
+    expect(bridges?.challenge).toBe(true);
+    expect(bridges?.sets).toBeGreaterThan(1);
+  });
+
   it('模板模式下没有加练自选池（科目已由原书清单定满）', () => {
     expect(planOf(stateTrainedDaysAgo(2, 45), 45).optional).toEqual([]);
   });

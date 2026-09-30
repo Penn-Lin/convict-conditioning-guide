@@ -232,7 +232,7 @@ export function Plan() {
             <ul className="m-0 mt-3.5 flex list-none flex-col gap-3 p-0">
               {items.map((item, index) => (
                 <li key={item.skill}>
-                  <PlanItemCard item={item} index={index + 1} />
+                  <PlanItemCard item={item} index={index + 1} mode={scheduleMode} />
                 </li>
               ))}
             </ul>
@@ -268,7 +268,7 @@ export function Plan() {
           <ul className="m-0 mt-3 flex list-none flex-col gap-3 p-0">
             {plan.optional.map((item, index) => (
               <li key={item.skill}>
-                <PlanItemCard item={item} index={items.length + index + 1} />
+                <PlanItemCard item={item} index={items.length + index + 1} mode={scheduleMode} />
               </li>
             ))}
           </ul>

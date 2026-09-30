@@ -244,10 +244,18 @@ export function LogSheet({ open, onClose, items, onSubmit }: LogSheetProps) {
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-text">{item.nameZh}</p>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="truncate text-sm font-bold text-text">{item.nameZh}</span>
+                    {item.challenge ? (
+                      <span className="shrink-0 rounded-pill bg-violet px-1.5 py-0.5 text-[11px] font-bold text-bg">
+                        进阶测试
+                      </span>
+                    ) : null}
+                  </p>
                   <p className="tnum mt-0.5 truncate text-xs text-muted">
                     {art?.nameZh} · 第 {item.stepNo} 式 ·{' '}
                     {formatVolume(item.metric, item.sets, item.targetPerSet)}
+                    {item.challenge ? '（原书高级标准）' : ''}
                   </p>
                 </div>
                 <span className="tnum shrink-0 text-xs font-semibold text-muted">

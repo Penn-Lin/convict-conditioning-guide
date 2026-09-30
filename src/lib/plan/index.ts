@@ -69,12 +69,26 @@ function resolveMinutes(state: TrainingState, options: PlanOptions): SessionMinu
 }
 
 /**
+ * 给「进阶测试」项追加上下文说明。
+ *
+ * 它的档位是全计划唯一的例外（不受时间档封顶），必须显式讲清楚来源，
+ * 否则用户会以为系统在偷偷加量。
+ */
+function markChallenge(item: PlanItem): PlanItem {
+  if (!item.challenge) return item;
+  return {
+    ...item,
+    reason: `**进阶测试**：本次按原书「高级标准」排量 —— 这是进下一式的门槛，做一遍真的再决定要不要晋级。${item.reason}`,
+  };
+}
+
+/**
  * 解析生效的排期模式。
  *
  * 优先级：当天临时指定 > 档案里的长期偏好 > `auto`。
  *
- * **默认 `auto` 是刻意的**：v4 之前的老存档没有这个字段，默认成模板会让
- * 用户某天打开发现计划完全变了却不知道为什么。想用原书模板要在「调整」里主动切一次。
+ * 档案里的偏好由 `defaultScheduleMode(level)` 推出（新手 → 初试身手，其余 → 渐入佳境），
+ * 老存档在迁移时补上同一个默认值。兜底 `auto` 只用于「档案都没建起来」的场景。
  */
 export function resolveScheduleMode(state: TrainingState, options: PlanOptions): ScheduleMode {
   return options.scheduleMode ?? state.profile.onboarding.scheduleMode ?? 'auto';
@@ -278,6 +292,9 @@ function buildTextbookDailyPlan(input: {
     overlapWithMain: OVERLAP_MATRIX[mainSnapshot.slug][snapshot.slug],
   }));
 
+  /** 今天要做进阶测试的科目（按原书高级标准排量，不受时间档封顶） */
+  const challengeSkills = new Set(options.challengeSkills ?? []);
+
   /** 按给定档位下限组装全部计划项 */
   const trial = (tierFloor: number) => {
     const buildCtx = {
@@ -291,16 +308,36 @@ function buildTextbookDailyPlan(input: {
       assistRestSeconds: MINUTE_BUDGET[ctx.minutes].restSeconds,
       // 「装不下就降档」必须真的压得住长期进度，否则逐档下试形同虚设
       tierCeiling: tierFloor,
+      // 进阶测试项不受上面这些上限约束，按原书高级标准排量
+      challengeSkills,
     };
-    const main = buildMainItem(mainSnapshot, mainReason(mainSnapshot), buildCtx);
+    const main = markChallenge(
+      buildMainItem(mainSnapshot, mainReason(mainSnapshot), buildCtx),
+    );
     const assists = assistCandidates.map((candidate) =>
-      buildAssistItem(
-        candidate,
-        assistReason(candidate, mainSnapshot.slug, mainSnapshot.currentStep),
-        buildCtx,
+      markChallenge(
+        buildAssistItem(
+          candidate,
+          assistReason(candidate, mainSnapshot.slug, mainSnapshot.currentStep),
+          buildCtx,
+        ),
       ),
     );
-    return { main, assists, total: sumMinutes([main, ...assists]) };
+    const all = [main, ...assists];
+    return {
+      main,
+      assists,
+      /** 真实总时长（含进阶测试项，用于时间账与展示） */
+      total: sumMinutes(all),
+      /**
+       * **只算常规项**的时长，用于「装不装得进时间档」的判定。
+       *
+       * 进阶测试项按原书高级标准排量，天然会超（六门里有一门到 3 组就要多出好几分钟）。
+       * 若把它算进去，逐档下试会为了迁就它一路往下降档，
+       * 把另外五门从 2 组压到 1 组 —— 为了让一门测试，牺牲整天训练量，本末倒置。
+       */
+      timedTotal: sumMinutes(all.filter((item) => !item.challenge)),
+    };
   };
 
   // 逐档下试：取第一个装得进时间档（含容差）的档位；都装不下则用最低档。
@@ -313,7 +350,7 @@ function buildTextbookDailyPlan(input: {
   let built = trial(chosenFloor);
   for (const floor of candidates) {
     const attempt = trial(floor);
-    const elapsed = ESTIMATE.warmupMinutes + attempt.total + ESTIMATE.cooldownMinutes;
+    const elapsed = ESTIMATE.warmupMinutes + attempt.timedTotal + ESTIMATE.cooldownMinutes;
     if (elapsed <= budget) {
       chosenFloor = floor;
       built = attempt;
@@ -492,24 +529,26 @@ export function generateDailyPlan(
   const chosenAssists = selectAssists(assistCandidates, assistCount);
 
   // ⑧ 组装计划项
+  const challengeSkills = new Set(options.challengeSkills ?? []);
   const buildCtx = {
     minutes: ctx.minutes,
     setsDelta: options.setsDelta ?? 0,
     skills: state.skills,
     tierFloor: MINUTE_BUDGET[ctx.minutes].tierFloor,
     tierOverride: options.volumeTierOverride,
+    challengeSkills,
   };
 
-  const mainItem = buildMainItem(
-    mainSnapshot,
-    mainReason(mainSnapshot),
-    buildCtx,
+  const mainItem = markChallenge(
+    buildMainItem(mainSnapshot, mainReason(mainSnapshot), buildCtx),
   );
   const assistItems = chosenAssists.map((candidate) =>
-    buildAssistItem(
-      candidate,
-      assistReason(candidate, mainSnapshot.slug, mainSnapshot.currentStep),
-      buildCtx,
+    markChallenge(
+      buildAssistItem(
+        candidate,
+        assistReason(candidate, mainSnapshot.slug, mainSnapshot.currentStep),
+        buildCtx,
+      ),
     ),
   );
 
