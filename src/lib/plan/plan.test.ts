@@ -803,6 +803,31 @@ describe('textbook · 原书模板的科目解析', () => {
     }
   });
 
+  it('辅助的组间休息与主训一致 —— 六门是平级科目，不该并存两套休息标准', () => {
+    const plan = planOf(stateTrainedDaysAgo(2, 45), 45);
+    expect(plan.assists.length).toBeGreaterThan(0);
+    for (const item of plan.assists) {
+      expect(item.restSeconds).toBe(plan.main?.restSeconds);
+    }
+  });
+
+  it('长期进度已到升阶档时，模板模式仍受时间档约束（不被长期进度顶穿）', () => {
+    // 回归防线：`effectiveTier` 的常规语义是「长期进度只允许往上」，
+    // 但在模板模式下必须能被 `tierCeiling` 压下来，否则逐档下试形同虚设 ——
+    // 曾经出现「15 分钟档排出 60 分钟训练」（3 组 × 六门）。
+    const state = stateTrainedDaysAgo(2, 15);
+    for (const slug of ART_ORDER) state.skills[slug].volumeTier = 2;
+
+    const plan = generateDailyPlan(state, { today: TODAY });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all.every((item) => item.volumeTier <= 1)).toBe(true);
+    expect(
+      plan.warmupMinutes + plan.totalEstimatedMinutes + plan.cooldownMinutes,
+    ).toBeLessThanOrEqual(15);
+  });
+
   it('模板模式下没有加练自选池（科目已由原书清单定满）', () => {
     expect(planOf(stateTrainedDaysAgo(2, 45), 45).optional).toEqual([]);
   });

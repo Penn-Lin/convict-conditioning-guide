@@ -125,6 +125,28 @@ interface BuildItemContext {
    * 所以模板模式传 `MAX_SETS_PER_ITEM` 把它放开。
    */
   assistSetCap?: number;
+  /**
+   * 覆盖「辅助组间休息秒数」。
+   *
+   * 同样是模板模式的平级修正：自动调度里主训休息更长（先做最难的、恢复要更充分），
+   * 辅助短一些；模板模式六门平级，没有理由让同一场训练里并存两套休息标准，
+   * 故传入 `MINUTE_BUDGET[x].restSeconds` 统一。
+   */
+  assistRestSeconds?: number;
+  /**
+   * **训练量档上限**（`undefined` = 不设限）。
+   *
+   * `effectiveTier` 的常规语义是「长期进度是地板，只允许往上」——
+   * 这对自动调度是对的（原书主张稳步推进，不因为今天时间少就减量）。
+   * 但**模板模式的立场相反**：六门固定，总时长必须装进时间档，装不下就得往下压。
+   *
+   * 没有这个上限时，「逐档下试」形同虚设：长期 `volumeTier` 一旦升到升阶档（2），
+   * `max(base, tierFloor)` 恒为 2，`trial(0)` 与 `trial(1)` 产出完全相同 ——
+   * 实测 **15 分钟档排出 60 分钟训练**。模板模式因此传入本次试算的档位作为上限。
+   *
+   * 注意优先级：用户手动指定的 `tierOverride` **不受**此上限约束（那是明确要求）。
+   */
+  tierCeiling?: number;
 }
 
 /**
@@ -150,6 +172,7 @@ function effectiveTier(
   skills: Record<ArtSlug, TrainingSkill>,
   tierFloor: number,
   tierOverride?: number,
+  tierCeiling?: number,
 ): number {
   const skill = skills[snapshot.slug];
   const maxTier = Math.max(0, snapshot.ladder.length - 1);
@@ -165,7 +188,13 @@ function effectiveTier(
   const canRaise = snapshot.daysSinceLast !== null && skill.consecutiveFail === 0;
   const effectiveFloor = canRaise ? tierFloor : Math.min(tierFloor, 1);
 
-  return Math.min(maxTier, Math.max(base, effectiveFloor));
+  // 上限只在模板模式传入（见 `tierCeiling` 注释）。它必须夹在最后一步，
+  // 否则「长期进度已到升阶档」会把逐档下试的结果整个吃掉。
+  const ceiling = tierCeiling === undefined
+    ? maxTier
+    : Math.min(maxTier, Math.max(0, Math.round(tierCeiling)));
+
+  return Math.min(ceiling, Math.max(base, effectiveFloor));
 }
 
 /**
@@ -197,7 +226,13 @@ export function buildMainItem(
   ctx: BuildItemContext,
 ): PlanItem {
   const budget = MINUTE_BUDGET[ctx.minutes];
-  const tierIndex = effectiveTier(snapshot, ctx.skills, ctx.tierFloor, ctx.tierOverride);
+  const tierIndex = effectiveTier(
+    snapshot,
+    ctx.skills,
+    ctx.tierFloor,
+    ctx.tierOverride,
+    ctx.tierCeiling,
+  );
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
   const sets = adjustSets(tier.sets, ctx.setsDelta, MAX_SETS_PER_ITEM);
@@ -239,7 +274,13 @@ export function buildAssistItem(
 ): PlanItem {
   const budget = MINUTE_BUDGET[ctx.minutes];
   const { snapshot } = candidate;
-  const tierIndex = effectiveTier(snapshot, ctx.skills, ctx.tierFloor, ctx.tierOverride);
+  const tierIndex = effectiveTier(
+    snapshot,
+    ctx.skills,
+    ctx.tierFloor,
+    ctx.tierOverride,
+    ctx.tierCeiling,
+  );
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
   // 辅助仍先受「辅助组数上限」约束（15 分钟档 1 组、其余 2 组，模板模式可被放开），
@@ -250,6 +291,7 @@ export function buildAssistItem(
     ctx.setsDelta,
     cap + 1,
   );
+  const restSeconds = ctx.assistRestSeconds ?? budget.assistRestSeconds;
   const { nameZh, nameEn } = nameOf(snapshot.slug, snapshot.currentStep);
 
   return {
@@ -262,13 +304,13 @@ export function buildAssistItem(
     volumeTier: tierIndex,
     sets,
     targetPerSet: tier.perSet,
-    restSeconds: budget.assistRestSeconds,
+    restSeconds,
     estimatedMinutes: estimateMinutes(
       snapshot.slug,
       snapshot.metric,
       sets,
       tier.perSet,
-      budget.assistRestSeconds,
+      restSeconds,
     ),
     reason,
   };

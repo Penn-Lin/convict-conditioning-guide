@@ -286,8 +286,11 @@ function buildTextbookDailyPlan(input: {
       skills: state.skills,
       tierFloor,
       tierOverride: options.volumeTierOverride,
-      // 模板模式下六门是平级科目，不受「辅助组数上限」压制（见 BuildItemContext 注释）
+      // 模板模式下六门是平级科目：组数不受「辅助组数上限」压制、休息也用同一套秒数
       assistSetCap: MAX_SETS_PER_ITEM,
+      assistRestSeconds: MINUTE_BUDGET[ctx.minutes].restSeconds,
+      // 「装不下就降档」必须真的压得住长期进度，否则逐档下试形同虚设
+      tierCeiling: tierFloor,
     };
     const main = buildMainItem(mainSnapshot, mainReason(mainSnapshot), buildCtx);
     const assists = assistCandidates.map((candidate) =>
