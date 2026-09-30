@@ -226,11 +226,24 @@ export const WEEK_PLAN = {
 export interface MinuteBudget {
   /** 最大项目数（含主训） */
   maxItems: number;
-  /** 主训训练量档偏移（+1 需额外满足「轻松完成」条件，否则恒为 0） */
-  mainVolumeOffset: number;
-  /** 主训组间休息（秒） */
+  /**
+   * **今日训练量档下限**（0 初级 / 1 中级 / 2 升阶）。
+   *
+   * 这是本版最重要的修正：时间档以前只决定「排几项」，不决定「每项做多少」，
+   * 导致选了 60 分钟却只排出 8 分钟的训练。现在时间档同时负责给出**训练量档的底线**：
+   * 时间越充裕，允许你练到越高的档；最终取值 = `max(长期进度, tierFloor)`。
+   *
+   * 取值依据来自原书第十一章「多少锻炼组为好」：
+   * > 「你真的只需做几个锻炼组……**我通常建议练习两组**……三组甚至四组也可以接受。」
+   *
+   * 即：原书的**日常训练量本来就是中级档（2 组）**，初级档（1 组）只是「到此一游」的起步门槛。
+   * 因此 15 / 30 分钟档给到中级档下限，45 / 60 分钟档给到升阶档下限。
+   * 软降量（上次完成度崩过）优先级更高，会忽略此下限。
+   */
+  tierFloor: number;
+  /** 主训组间休息（秒）—— 本站参考值，非原书规定 */
   restSeconds: number;
-  /** 辅助组间休息（秒） */
+  /** 辅助组间休息（秒）—— 本站参考值，非原书规定 */
   assistRestSeconds: number;
   /** 辅助组数上限 */
   assistSetCap: number;
@@ -242,7 +255,7 @@ export interface MinuteBudget {
 export const MINUTE_BUDGET: Record<15 | 30 | 45 | 60, MinuteBudget> = {
   15: {
     maxItems: 2,
-    mainVolumeOffset: 0,
+    tierFloor: 1,
     restSeconds: 60,
     assistRestSeconds: 60,
     assistSetCap: 1,
@@ -250,7 +263,7 @@ export const MINUTE_BUDGET: Record<15 | 30 | 45 | 60, MinuteBudget> = {
   },
   30: {
     maxItems: 3,
-    mainVolumeOffset: 0,
+    tierFloor: 1,
     restSeconds: 75,
     assistRestSeconds: 75,
     assistSetCap: 2,
@@ -258,7 +271,7 @@ export const MINUTE_BUDGET: Record<15 | 30 | 45 | 60, MinuteBudget> = {
   },
   45: {
     maxItems: 4,
-    mainVolumeOffset: 0,
+    tierFloor: 2,
     restSeconds: 90,
     assistRestSeconds: 75,
     assistSetCap: 2,
@@ -266,13 +279,26 @@ export const MINUTE_BUDGET: Record<15 | 30 | 45 | 60, MinuteBudget> = {
   },
   60: {
     maxItems: 5,
-    mainVolumeOffset: 1,
+    tierFloor: 2,
     restSeconds: 120,
     assistRestSeconds: 90,
     assistSetCap: 2,
     optionalPool: true,
   },
 };
+
+/**
+ * 训练量档的中文名（0 初级 / 1 中级 / 2 升阶）。
+ *
+ * 与 `volumeLadder.TIER_LABEL_CN` 同源，但后者在 `lib/plan/volumeLadder` 里，
+ * 配置层不该反向依赖工具层，故此处保留一份只读副本供 UI / 文案使用。
+ */
+export const TIER_NAME_CN = ['初级', '中级', '升阶'] as const;
+
+/** 训练量档标签：`初级档` / `中级档` / `升阶档` */
+export function tierLabel(tier: number): string {
+  return `${TIER_NAME_CN[tier] ?? `第 ${tier + 1}`}档`;
+}
 
 /** 项数硬上限（防止周缺口 + 时间档叠加后失控） */
 export const MAX_ITEMS_CAP = 5;
@@ -285,6 +311,20 @@ export const MAX_ITEMS_CAP = 5;
 export const ESTIMATE = {
   /** 每项的准备时间（秒） */
   prepSeconds: 60,
+  /**
+   * 热身时长（分钟）—— **有原书依据**。
+   *
+   * 原书第十一章「热身」：以「你正要练的动作的低难度版本」做两组，
+   * 第一组约 20 次、第二组约 15 次，之后即可正式训练；超过 4 组只是白费力气。
+   * 按每项 1 分钟准备折算，两组热身约 3 分钟 —— 不是 5 分钟，更不是「填满剩余时间」。
+   */
+  warmupMinutes: 3,
+  /**
+   * 训练后放松（分钟）—— **原书并不推荐系统冷却**：
+   * 「我从不做系统的冷却。高强度训练之后，我会来回走走或坐在床铺上做几次深呼吸。」
+   * 因此这里只给 2 分钟的最低额度，仅用于把它显式计入时间账，不鼓励拉长。
+   */
+  cooldownMinutes: 2,
   /** 单次动作耗时（秒）—— 含离心控制 */
   secondsPerRep: {
     pushups: 4,
@@ -297,6 +337,22 @@ export const ESTIMATE = {
   /** 加练自选池最多展示几项 */
   optionalPoolSize: 2,
 } as const;
+
+/* ---------------------------------------------------------------------------
+ * 组间休息的取值来源（重要：如实标注，不要假装是原书数字）
+ * ------------------------------------------------------------------------
+ *
+ * 原书第十一章「组间休息」原文：
+ * > 「至于组间休息多久，那要看你的目标。……**这没有什么规定，完全要看你的个人情况。**
+ * >  如果你发现自己需要在组间休息 5 分钟才能恢复大部分气力，那就休息 5 分钟。
+ * >  只是要注意，如果你需要休息 5 分钟以上，那么身体就会开始冷却。」
+ *
+ * 结论：**原书刻意不给具体秒数**，只给「休息到能全力以赴」这一原则。
+ * `MINUTE_BUDGET[*].restSeconds` 是本站为了让计划可执行而自行给的**参考值**，
+ * 属于「下限建议」而非「原书上限」—— UI 文案必须把它说成参考值，
+ * 并明确「没恢复就继续休息，原书不设上限」。
+ * ------------------------------------------------------------------------ */
+
 
 /* ---------------------------------------------------------------------------
  * 晋级 / 维持 / 降阶规则（§8.3）
@@ -333,8 +389,8 @@ export const STEP_ADJUSTMENTS = {
 /** 单键持久化（原子更新，避免多 key 不一致） */
 export const STORAGE_KEY = 'cc.training.v1';
 
-/** 存储版本号（结构变更时递增并做迁移） */
-export const STORAGE_VERSION = 1;
+/** 存储版本号（结构变更时递增并做迁移）—— v2：DailyPlan 增加热身 / 放松与训练量档覆盖 */
+export const STORAGE_VERSION = 2;
 
 /** 训练会话保留上限（超出裁剪最旧） */
 export const SESSION_LIMIT = 200;

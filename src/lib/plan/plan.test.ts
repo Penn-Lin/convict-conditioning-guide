@@ -220,12 +220,14 @@ describe('selection & budget · §10.5–10.6', () => {
     expect(plan.main?.nameZh).toBe('支撑深蹲');
   });
 
-  it('45 分钟档：2 组 × 15 次、休息 90 秒', () => {
+  it('45 分钟档：时间档底线把训练量抬到升阶档（3 组 × 30 次）、休息 90 秒', () => {
     const plan = generateDailyPlan(state, { today: TODAY });
-    expect(plan.main?.sets).toBe(2);
-    expect(plan.main?.targetPerSet).toBe(15);
+    // 支撑深蹲阶梯 [1×10, 2×15, 3×30]，长期 volumeTier = 1，时间档底线 = 2 → 取 2
+    expect(plan.main?.sets).toBe(3);
+    expect(plan.main?.targetPerSet).toBe(30);
+    expect(plan.main?.volumeTier).toBe(2);
     expect(plan.main?.restSeconds).toBe(90);
-    expect(plan.main?.estimatedMinutes).toBeCloseTo(4.0, 1);
+    expect(plan.main?.estimatedMinutes).toBeCloseTo(8.5, 1);
   });
 
   it('辅助 = 举腿 + 引体向上 + 桥，且不含双推组合', () => {
@@ -240,23 +242,34 @@ describe('selection & budget · §10.5–10.6', () => {
     expect(plan.assists.map((item) => item.skill)).not.toContain('pushups');
   });
 
-  it('辅助组数受时间档上限约束，辅助休息 75 秒', () => {
+  it('辅助组数受时间档上限约束（升阶档也只能 2 组），辅助休息 75 秒', () => {
     const plan = generateDailyPlan(state, { today: TODAY });
     const legRaises = plan.assists.find((item) => item.skill === 'leg-raises');
     const bridges = plan.assists.find((item) => item.skill === 'bridges');
 
-    expect(legRaises?.sets).toBe(1); // 阶梯初级 1 组 × 10 次
+    // 举腿从未训练 → 抬档保护只给到中级档 [2 组 × 20 次]
+    expect(legRaises?.volumeTier).toBe(1);
+    expect(legRaises?.sets).toBe(2);
+    expect(legRaises?.targetPerSet).toBe(20);
     expect(legRaises?.restSeconds).toBe(75);
-    expect(bridges?.sets).toBe(2); // 中级 2 组 × 20 次，cap 2
-    expect(bridges?.targetPerSet).toBe(20);
+
+    // 桥有训练记录 → 抬到升阶档，但辅助组数上限 2 组（阶梯本身是 3 组）
+    expect(bridges?.volumeTier).toBe(2);
+    expect(bridges?.sets).toBe(2);
+    expect(bridges?.targetPerSet).toBe(40);
   });
 
-  it('总耗时 ≈ 14.7 分钟，且剩余时间被诚实说明（时间预算不填满）', () => {
+  it('时间账含热身与放松，剩余时间是扣除固定开销后的真实富余', () => {
     const plan = generateDailyPlan(state, { today: TODAY });
-    expect(plan.totalEstimatedMinutes).toBeCloseTo(14.7, 1);
-    expect(plan.freeMinutes).toBeCloseTo(30.3, 1);
-    expect(plan.tips.join('')).toContain('热身');
-    expect(plan.tips.join('')).toContain('原书训练量本就是短时段');
+    expect(plan.totalEstimatedMinutes).toBeCloseTo(25.8, 1);
+    expect(plan.warmupMinutes).toBe(3);
+    expect(plan.cooldownMinutes).toBe(2);
+    // 45 − 3 − 25.8 − 2 = 14.2
+    expect(plan.freeMinutes).toBeCloseTo(14.2, 1);
+    expect(plan.tips.join('')).toContain('时间账');
+    // 回归守卫：绝不能再出现「剩余的 X 分钟拿去热身」这种荒谬结论
+    expect(plan.tips.join('')).not.toContain('用于热身');
+    expect(plan.summary).toContain('含热身与放松');
   });
 
   it('加练自选池提供但不自动加入', () => {
@@ -334,7 +347,7 @@ describe('replan · §10.8–10.9 用户主动修改', () => {
     expect(next.main?.skill).toBe('bridges');
   });
 
-  it('改成 15 分钟 → 只保留主训 + 1 个辅助，休息压到 60 秒', () => {
+  it('改成 15 分钟 → 只保留主训 + 1 个辅助，休息压到 60 秒、辅助上限 1 组', () => {
     const base = generateDailyPlan(state, { today: TODAY });
     const next = replan(state, base, { availableMinutes: 15 });
 
@@ -343,8 +356,22 @@ describe('replan · §10.8–10.9 用户主动修改', () => {
     expect(next.main?.estimatedMinutes).toBeCloseTo(3.5, 1);
     expect(next.assists.map((item) => item.skill)).toEqual(['leg-raises']);
     expect(next.assists[0].sets).toBe(1);
-    expect(next.totalEstimatedMinutes).toBeCloseTo(5.2, 1);
+    expect(next.totalEstimatedMinutes).toBeCloseTo(5.8, 1);
     expect(next.optional).toEqual([]); // 15 分钟档关闭加练池
+  });
+
+  it('改时间档会清掉手动的档位指定（避免「15 分钟档 + 升阶档」这种组合）', () => {
+    const base = generateDailyPlan(state, { today: TODAY });
+    const overridden = replan(state, base, { volumeTierOverride: 0 });
+    expect(overridden.appliedOptions.volumeTierOverride).toBe(0);
+
+    // UI 的时间档按钮同时传 volumeTierOverride: undefined
+    const switched = replan(state, overridden, {
+      availableMinutes: 15,
+      volumeTierOverride: undefined,
+    });
+    expect(switched.appliedOptions.volumeTierOverride).toBeUndefined();
+    expect(switched.main?.volumeTier).toBe(1); // 回到 15 分钟档的底线
   });
 
   it('减少训练量只作用于组数，不动单组次数', () => {
@@ -498,8 +525,151 @@ describe('closed loop · §10.11 训练结束后的判定', () => {
 });
 
 /* ---------------------------------------------------------------------------
+ * 5b. 训练量档下限（本版新增 · 修「选了 60 分钟只练 8 分钟」）
+ * ------------------------------------------------------------------------ */
+
+describe('tierFloor · 时间档决定训练量的底线', () => {
+  /** 冷启动：六艺全部零历史 */
+  const freshSkills = {} as Record<ArtSlug, TrainingSkill>;
+  for (const slug of ART_ORDER) freshSkills[slug] = skill(slug, 1, 0);
+  const freshState: TrainingState = { ...state, skills: freshSkills, sessions: [] };
+
+  it('有训练记录的项目：时间档底线把档位抬起来（45 分钟档 → 升阶档）', () => {
+    const plan = generateDailyPlan(state, { today: TODAY, availableMinutes: 45 });
+    // 深蹲有记录（7 天前），长期 volumeTier = 1 → 被底线抬到 2
+    expect(plan.main?.volumeTier).toBe(2);
+    expect(plan.main?.sets).toBe(3);
+    expect(plan.reasons.some((reason) => reason.code === 'TIER_FLOOR')).toBe(true);
+  });
+
+  it('冷启动只抬到中级档 —— 原书「慢工出细活」：新手不按升阶标准起手', () => {
+    const plan = generateDailyPlan(freshState, { today: TODAY, availableMinutes: 60 });
+    expect(plan.main?.volumeTier).toBe(1);
+    expect(plan.main?.sets).toBe(2);
+    expect(plan.assists.every((item) => item.volumeTier === 1)).toBe(true);
+  });
+
+  it('冷启动的 15 / 30 / 45 / 60 分钟档都得到有意义的训练量（不再是 3 分钟的摆设）', () => {
+    const byMinutes = ([15, 30, 45, 60] as const).map((availableMinutes) => {
+      const plan = generateDailyPlan(freshState, { today: TODAY, availableMinutes });
+      return {
+        availableMinutes,
+        train: plan.totalEstimatedMinutes,
+        withWarmup: plan.warmupMinutes + plan.totalEstimatedMinutes + plan.cooldownMinutes,
+        free: plan.freeMinutes,
+      };
+    });
+
+    for (const row of byMinutes) {
+      // 含热身放松的总时长至少占到时间档的 55%，
+      // 且绝对值不再是个摆设（修前 45 分钟档只有 6.7 分钟、60 分钟档只有 8.4 分钟）。
+      // 之所以只到 55% 而不是更高：冷启动受「新手只到中级档」保护，首次会保守一档，
+      // 练过一次之后 45 / 60 分钟档就会用上升阶档（约 43 / 54 分钟）。
+      expect(row.withWarmup / row.availableMinutes).toBeGreaterThanOrEqual(0.55);
+      expect(row.withWarmup).toBeGreaterThanOrEqual(12);
+      expect(row.free).toBeLessThan(row.availableMinutes);
+    }
+
+    // 且时间档越长、训练量单调不减
+    const trains = byMinutes.map((row) => row.train);
+    for (let i = 1; i < trains.length; i += 1) {
+      expect(trains[i]).toBeGreaterThanOrEqual(trains[i - 1]);
+    }
+  });
+
+  it('软降量的项目忽略时间档底线 —— 练不动的时候，时间多不代表该加量', () => {
+    const softState: TrainingState = {
+      ...state,
+      skills: {
+        ...state.skills,
+        squats: { ...state.skills.squats, volumeTier: 1, softDowngrade: true },
+      },
+    };
+    const plan = generateDailyPlan(softState, { today: TODAY, availableMinutes: 60 });
+    expect(plan.main?.skill).toBe('squats');
+    expect(plan.main?.volumeTier).toBe(0); // 1 − 1，没有被时间档底线抬回去
+    expect(plan.main?.sets).toBe(1);
+  });
+
+  it('手动指定档位：只作用于当天，不写回长期进度', () => {
+    const base = generateDailyPlan(state, { today: TODAY });
+    const next = replan(state, base, { volumeTierOverride: 0 });
+
+    expect(next.main?.volumeTier).toBe(0);
+    expect(next.main?.sets).toBe(1);
+    expect(next.appliedOptions.volumeTierOverride).toBe(0);
+    expect(next.reasons.some((reason) => reason.code === 'TIER_FLOOR')).toBe(true);
+    // 纯函数：存储态没有被改写
+    expect(state.skills.squats.volumeTier).toBe(1);
+  });
+
+  it('手动指定可以突破「从未训练只到中级」的保护 —— 用户想试就让他试', () => {
+    const base = generateDailyPlan(freshState, { today: TODAY });
+    expect(base.main?.volumeTier).toBe(1);
+
+    const next = replan(freshState, base, { volumeTierOverride: 2 });
+    expect(next.main?.volumeTier).toBe(2);
+    expect(next.main?.sets).toBe(3);
+  });
+
+  it('手动指定不会越界：超过阶梯档数时钳到最高档', () => {
+    const base = generateDailyPlan(state, { today: TODAY });
+    const next = replan(state, base, { volumeTierOverride: 99 });
+    expect(next.main?.volumeTier).toBe(2); // 支撑深蹲只有 3 档
+    expect(next.main?.sets).toBe(3);
+  });
+
+  it('保持型动作的组数恒为 1，抬档只拉长单次保持时间（不凭空造出 3 组）', async () => {
+    const { ladderFor } = await import('./snapshot');
+    const ladder = ladderFor('handstand-pushups', 1);
+    expect(ladder.every((tier) => tier.sets === 1)).toBe(true);
+    expect(ladder.map((tier) => tier.perSet)).toEqual([30, 60, 120]);
+  });
+});
+
+/* ---------------------------------------------------------------------------
  * 6. 阶梯解析与工具函数
  * ------------------------------------------------------------------------ */
+
+describe('storage · v1 → v2 迁移不丢数据', () => {
+  it('保留训练历史与六艺进度，只丢弃缺字段的旧今日计划', async () => {
+    const { migrate } = await import('./storage');
+    const v1 = {
+      version: 1,
+      profile: {
+        id: 'p',
+        createdAt: '2026-09-01T08:00:00',
+        onboarding: {
+          daysPerWeek: 4 as const,
+          sessionMinutes: 45 as const,
+          level: 'some' as const,
+          selfReport: {},
+        },
+      },
+      skills: {
+        pushups: { ...skill('pushups', 4, 1), lastTrainedAt: '2026-09-29T12:00:00' },
+      },
+      sessions: [doneSession('2026-09-29', 'pushups')],
+      todayPlan: { date: '2026-09-30' },
+    };
+
+    const out = migrate(v1 as Parameters<typeof migrate>[0]);
+
+    expect(out.version).toBe(2);
+    expect(out.sessions).toHaveLength(1);
+    expect(out.skills.pushups.currentStep).toBe(4);
+    expect(out.skills.pushups.lastTrainedAt).toBe('2026-09-29T12:00:00');
+    expect(out.todayPlan).toBeNull();
+  });
+
+  it('完全无法识别的版本安全降级为空状态，不抛异常', async () => {
+    const { migrate } = await import('./storage');
+    const out = migrate({ version: 99 } as unknown as Parameters<typeof migrate>[0]);
+    expect(out.version).toBe(2);
+    expect(out.sessions).toEqual([]);
+    expect(out.profile).toBeNull();
+  });
+});
 
 describe('volumeLadder · 从 trainingGoal 派生训练量阶梯', () => {
   it('次数型', () => {

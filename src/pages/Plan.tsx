@@ -92,6 +92,12 @@ export function Plan() {
     (item): item is NonNullable<typeof item> => item !== null,
   );
 
+  /* ---- 时间账（热身 + 训练 + 放松）---- */
+  const sessionMinutes =
+    Math.round(
+      (plan.warmupMinutes + plan.totalEstimatedMinutes + plan.cooldownMinutes) * 10,
+    ) / 10;
+
   /* ---- 本周 ---- */
   const weekStartDate = weekStart(today);
   const weekDays = new Set(
@@ -156,7 +162,7 @@ export function Plan() {
         variant="tinted"
         icon={Dumbbell}
         title="今天练这些"
-        meta={plan.kind === 'training' ? `${plan.totalEstimatedMinutes} 分钟` : undefined}
+        meta={plan.kind === 'training' ? `约 ${sessionMinutes} 分钟` : undefined}
         action={
           <button
             type="button"
@@ -179,6 +185,30 @@ export function Plan() {
         ) : (
           <>
             <p className="text-sm leading-relaxed text-muted">{plan.summary}</p>
+
+            {/* 时间账：把热身 / 训练 / 放松三行摊开，杜绝「剩 50 分钟去热身」式结论 */}
+            <dl className="mt-3 grid grid-cols-4 gap-1.5">
+              {[
+                { label: '热身', value: plan.warmupMinutes, unit: '分' },
+                { label: '训练', value: plan.totalEstimatedMinutes, unit: '分' },
+                { label: '放松', value: plan.cooldownMinutes, unit: '分' },
+                { label: '余量', value: plan.freeMinutes, unit: '分' },
+              ].map((cell) => (
+                <div key={cell.label} className="rounded-md bg-surface2 px-2 py-1.5 text-center">
+                  <dt className="text-[11px] text-muted">{cell.label}</dt>
+                  <dd className="tnum mt-0.5 font-mono text-sm font-bold text-text">
+                    {cell.value}
+                    <span className="ml-0.5 text-[11px] font-semibold text-muted">
+                      {cell.unit}
+                    </span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted">
+              你的时间档是 {plan.availableMinutes} 分钟。热身按原书做法用低难度版本做两组，
+              约 3 分钟即可，不必更长。
+            </p>
 
             <ul className="m-0 mt-3.5 flex list-none flex-col gap-3 p-0">
               {items.map((item, index) => (

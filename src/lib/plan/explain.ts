@@ -157,6 +157,8 @@ export interface ExplainInput {
   };
   returned: { skill: ArtSlug; code: string; text: string }[];
   kind: 'training' | 'recovery';
+  /** 今日训练量档的说明（时间档抬高档位 / 用户手动指定时非 null） */
+  tierNote?: string | null;
 }
 
 /** 生成完整的 `PlanReason[]`（UI 直接渲染，无需自己拼文案） */
@@ -173,6 +175,7 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
     countDecision,
     returned,
     kind,
+    tierNote,
   } = input;
 
   // ① 用户调整（优先展示，让用户知道「因为你的调整，计划变成了这样」）
@@ -202,6 +205,15 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
           ? `已按你的要求减少训练量：组数按 ${Math.round(scale * 100)}% 缩减，单组次数由训练量阶梯决定、不轻易改动。`
           : `已按你的要求增加训练量：组数按 ${Math.round(scale * 100)}% 增加，仍受项数上限与阶梯约束。`,
       values: { volumeScale: scale },
+    });
+  }
+
+  // ①b 今日训练量档（时间档抬档 / 用户手动指定）—— 必须显式说明，否则会被当成偷偷加量
+  if (tierNote) {
+    reasons.push({
+      code: 'TIER_FLOOR',
+      text: tierNote,
+      values: { tier: options.volumeTierOverride ?? -1 },
     });
   }
 
@@ -319,13 +331,26 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
   return reasons;
 }
 
-/** 生成一句话摘要（首页 / 计划页首屏） */
+/** 时间账（热身 / 训练 / 放松 / 富余）—— 与 `index.timeLedger` 同构 */
+export interface TimeLedger {
+  warmupMinutes: number;
+  cooldownMinutes: number;
+  freeMinutes: number;
+}
+
+/**
+ * 生成一句话摘要（首页 / 计划页首屏）。
+ *
+ * 摘要必须给出**含热身的完整时间账**，而不是只报训练动作的净耗时 ——
+ * 否则「选了 60 分钟」与「预计 8 分钟」之间的落差会显得像算错了。
+ */
 export function buildSummary(
   kind: 'training' | 'recovery',
   mainItem: PlanItem | null,
   assists: PlanItem[],
   totalMinutes: number,
   minutes: number,
+  ledger: TimeLedger,
 ): string {
   if (kind === 'recovery' || !mainItem) {
     return '今天建议安排恢复：散步、拉伸或呼吸练习。';
@@ -334,33 +359,54 @@ export function buildSummary(
     assists.length > 0
       ? `，再补 ${assists.map((item) => item.nameZh).join('、')}`
       : '';
-  const free = Math.max(0, Math.round((minutes - totalMinutes) * 10) / 10);
-  const freeText = free >= 5 ? `，其余时间留给热身与拉伸` : '';
-  return `今天主练${mainItem.nameZh}${assistText}，预计 ${totalMinutes} 分钟${freeText}。`;
+  const total = Math.round((ledger.warmupMinutes + totalMinutes + ledger.cooldownMinutes) * 10) / 10;
+  const freeText =
+    ledger.freeMinutes >= 5
+      ? `，你的时间档是 ${minutes} 分钟，还剩约 ${ledger.freeMinutes} 分钟`
+      : '';
+  return `今天主练${mainItem.nameZh}${assistText}，训练 ${totalMinutes} 分钟（含热身与放松约 ${total} 分钟）${freeText}。`;
 }
 
-/** 训练提示（诚实说明「为什么 45 分钟只安排了 15 分钟」） */
+/**
+ * 训练提示。
+ *
+ * 三条硬规则（都是被用户投诉过的地方）：
+ * 1. **不许再说「剩余 X 分钟建议用于热身」** —— 热身是固定的 2 组、约 3 分钟，
+ *    原书明确说「超过 4 组只是白费力气」，不可能吃掉半小时。
+ * 2. **组间休息必须说明是参考值** —— 原书原文「这没有什么规定，完全要看你的个人情况」，
+ *    把它写成硬性指标是在编造原书没有的话。
+ * 3. 有富余时间时，明确「不填满是对的」并指向加练自选，而不是让人以为漏排了动作。
+ */
 export function buildTips(
   items: PlanItem[],
   minutes: number,
   totalMinutes: number,
+  ledger: TimeLedger,
 ): string[] {
   const tips: string[] = ['不练到力竭，每式达标即止。'];
+
   const mainItem = items.find((item) => item.role === 'main');
   const assistRest = items.find((item) => item.role === 'assist')?.restSeconds;
   if (mainItem) {
     tips.push(
       assistRest && assistRest !== mainItem.restSeconds
-        ? `${mainItem.nameZh}组间休息 ${mainItem.restSeconds} 秒，其余 ${assistRest} 秒。`
-        : `组间休息 ${mainItem.restSeconds} 秒。`,
+        ? `${mainItem.nameZh}组间休息参考 ${mainItem.restSeconds} 秒，其余 ${assistRest} 秒；没恢复就继续休息，原书不设上限。`
+        : `组间休息参考 ${mainItem.restSeconds} 秒；没恢复就继续休息，原书不设上限。`,
     );
   }
-  const free = Math.max(0, Math.round((minutes - totalMinutes) * 10) / 10);
-  if (free >= 5) {
+
+  const work = Math.round((ledger.warmupMinutes + totalMinutes + ledger.cooldownMinutes) * 10) / 10;
+  tips.push(
+    `时间账：热身约 ${ledger.warmupMinutes} 分钟（用低难度版本做两组）+ 训练 ${totalMinutes} 分钟 + 放松约 ${ledger.cooldownMinutes} 分钟 ≈ ${work} 分钟，你的时间档是 ${minutes} 分钟。`,
+  );
+
+  if (ledger.freeMinutes >= 10) {
     tips.push(
-      `计划仅占约 ${totalMinutes} 分钟（原书训练量本就是短时段、低组数）。剩余 ${free} 分钟建议用于热身 5 分钟与拉伸。`,
+      `还剩约 ${ledger.freeMinutes} 分钟。原书主张「质高于量」：不练到力竭、不拉长训练，` +
+        `富余时间用于走动放松即可。想多练就从下面的「加练自选」里挑 1–2 项，而不是把现有项目加组。`,
     );
   }
+
   tips.push('任一动作出现尖锐疼痛立即停止，不要带痛训练。');
   return tips;
 }

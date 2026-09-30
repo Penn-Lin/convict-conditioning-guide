@@ -165,7 +165,11 @@ export function Home() {
         variant="tinted"
         icon={Dumbbell}
         title="训练安排"
-        meta={ready && plan && !trainedToday ? `约 ${plan.totalEstimatedMinutes} 分钟` : undefined}
+        meta={
+          ready && plan && !trainedToday
+            ? `约 ${Math.round((plan.warmupMinutes + plan.totalEstimatedMinutes + plan.cooldownMinutes) * 10) / 10} 分钟`
+            : undefined
+        }
       >
         {!ready || !plan ? (
           <div>

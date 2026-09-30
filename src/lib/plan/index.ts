@@ -22,11 +22,11 @@ import type {
   PlanOptions,
   PriorityBreakdown,
   SessionMinutes,
-  SkillSnapshot,
   TrainingState,
 } from '@/types/plan';
+import { getArt } from '@/data';
 
-import { MINUTE_BUDGET } from './config';
+import { MINUTE_BUDGET, ESTIMATE, tierLabel } from './config';
 import {
   buildAssistItem,
   buildMainItem,
@@ -57,6 +57,71 @@ function resolveMinutes(state: TrainingState, options: PlanOptions): SessionMinu
 }
 
 /**
+ * 时间账：热身 / 训练 / 放松 / 真正富余。
+ *
+ * 把热身与放松**显式计入**，是修掉「剩余 52 分钟建议用于热身」这种结论的关键 ——
+ * 原书的热身只有 2 组、两三分钟，不可能吃掉半小时。
+ */
+function timeLedger(minutes: number, trainMinutes: number) {
+  const warmupMinutes = ESTIMATE.warmupMinutes;
+  const cooldownMinutes = ESTIMATE.cooldownMinutes;
+  const freeMinutes = Math.max(
+    0,
+    Math.round((minutes - warmupMinutes - trainMinutes - cooldownMinutes) * 10) / 10,
+  );
+  return { warmupMinutes, cooldownMinutes, freeMinutes };
+}
+
+/**
+ * 今日训练量档的说明文案（当时间档把档位抬高了、或用户手动指定时生成）。
+ *
+ * 这是「为什么今天练的是升阶档而不是初级档」的唯一解释入口，
+ * 避免用户以为系统在偷偷加量。
+ */
+function tierNote(
+  state: TrainingState,
+  minutes: SessionMinutes,
+  options: PlanOptions,
+  items: PlanItem[],
+): string | null {
+  if (items.length === 0) return null;
+  const floor = MINUTE_BUDGET[minutes].tierFloor;
+
+  if (options.volumeTierOverride !== undefined) {
+    return `已按你的指定，今天所有项目都按${tierLabel(options.volumeTierOverride)}安排（只作用于今天，不影响长期进度）。`;
+  }
+
+  const raised = items.filter((item) => {
+    const skill = state.skills[item.skill];
+    return item.volumeTier > skill.volumeTier;
+  });
+  if (raised.length === 0) return null;
+
+  const names = (list: PlanItem[]) =>
+    list
+      .map((item) => getArt(item.skill)?.nameZh ?? item.skill)
+      .join('、');
+
+  // 分两类说：本来就有训练记录、被时间档抬档的；以及从没练过、按原书默认量起步的
+  const seasoned = raised.filter((item) => state.skills[item.skill].recentSessions.length > 0);
+  const fresh = raised.filter((item) => state.skills[item.skill].recentSessions.length === 0);
+
+  const parts: string[] = [];
+  if (seasoned.length > 0) {
+    parts.push(
+      `你的时间档是 ${minutes} 分钟，${names(seasoned)}按${tierLabel(
+        Math.max(...seasoned.map((item) => item.volumeTier)),
+      )}安排（不低于时间档底线${tierLabel(floor)}）`,
+    );
+  }
+  if (fresh.length > 0) {
+    parts.push(`${names(fresh)}还没有训练记录，本次按${tierLabel(1)}（2 组）起步`);
+  }
+
+  return `${parts.join('；')}。原书说「我通常建议练习两组」，初级档只是刚换新一式时的门槛。`;
+}
+
+/**
  * 本周（周一开始）已完成的训练次数。
  *
  * 只统计 `state === 'done'` 的会话，且按**日期去重** ——
@@ -70,18 +135,6 @@ export function weekCompletedCount(state: TrainingState, today: string): number 
     if (session.date >= start && session.date <= today) dates.add(session.date);
   }
   return dates.size;
-}
-
-/** 主训是否满足「轻松完成」条件（60 分钟档的 +1 档偏移前置条件） */
-function mainIsEasy(state: TrainingState, snapshot: SkillSnapshot): boolean {
-  const skill = state.skills[snapshot.slug];
-  const last = skill.recentSessions[0];
-  if (!last) return false;
-  return (
-    last.completionRatio >= 1 &&
-    (skill.lastFatigue ?? 3) <= 3 &&
-    skill.consecutiveEasy >= 1
-  );
 }
 
 /** 恢复日兜底方案（§4.3）：绝不返回空白页 */
@@ -117,8 +170,14 @@ function buildRecoveryPlan(
     assists: [],
     optional: [],
     totalEstimatedMinutes: 0,
+    warmupMinutes: 0,
+    cooldownMinutes: 0,
     freeMinutes: ctx.minutes,
-    summary: buildSummary('recovery', null, [], 0, ctx.minutes),
+    summary: buildSummary('recovery', null, [], 0, ctx.minutes, {
+      warmupMinutes: 0,
+      cooldownMinutes: 0,
+      freeMinutes: ctx.minutes,
+    }),
     tips: [
       '今天不安排训练。恢复也是训练的一部分 —— 原书明确反对连续超量。',
       '建议做 10 分钟轻度活动（散步 / 拉伸 / 呼吸练习），保持关节活动度即可。',
@@ -208,7 +267,8 @@ export function generateDailyPlan(
     minutes: ctx.minutes,
     volumeScale: options.volumeScale ?? 1,
     skills: state.skills,
-    mainIsEasy: mainIsEasy(state, mainSnapshot),
+    tierFloor: MINUTE_BUDGET[ctx.minutes].tierFloor,
+    tierOverride: options.volumeTierOverride,
   };
 
   const mainItem = buildMainItem(
@@ -236,9 +296,9 @@ export function generateDailyPlan(
 
   const items: PlanItem[] = [mainItem, ...assistItems];
   const totalEstimatedMinutes = sumMinutes(items);
-  const freeMinutes = Math.max(
-    0,
-    Math.round((ctx.minutes - totalEstimatedMinutes) * 10) / 10,
+  const { warmupMinutes, cooldownMinutes, freeMinutes } = timeLedger(
+    ctx.minutes,
+    totalEstimatedMinutes,
   );
 
   // ⑨ 生成解释
@@ -261,7 +321,10 @@ export function generateDailyPlan(
     countDecision,
     returned: gate.returned,
     kind: 'training',
+    tierNote: tierNote(state, ctx.minutes, options, items),
   });
+
+  const ledger = { warmupMinutes, cooldownMinutes, freeMinutes };
 
   return {
     id: makeId('plan', today, revision),
@@ -274,9 +337,16 @@ export function generateDailyPlan(
     assists: assistItems,
     optional: optionalItems,
     totalEstimatedMinutes,
-    freeMinutes,
-    summary: buildSummary('training', mainItem, assistItems, totalEstimatedMinutes, ctx.minutes),
-    tips: buildTips(items, ctx.minutes, totalEstimatedMinutes),
+    ...ledger,
+    summary: buildSummary(
+      'training',
+      mainItem,
+      assistItems,
+      totalEstimatedMinutes,
+      ctx.minutes,
+      ledger,
+    ),
+    tips: buildTips(items, ctx.minutes, totalEstimatedMinutes, ledger),
     reasons,
     excluded: gate.excluded,
     scores,

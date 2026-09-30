@@ -5,11 +5,12 @@
  * 训练现场需要的是前两项，第三项是给「不服气」的时刻看的（可折叠）。
  */
 import { Link } from 'react-router-dom';
-import { ChevronRight, Circle, Rocket, Star } from 'lucide-react';
+import { ChevronRight, Circle, Layers, Rocket, Star } from 'lucide-react';
 import type { PlanItem } from '@/types/plan';
 import { getArt } from '@/data';
 import { moveHref } from '@/lib/slug';
 import { artTheme } from '@/lib/artTheme';
+import { tierLabel } from '@/lib/plan/config';
 import { formatSeconds, formatVolume } from '@/lib/plan/volumeLadder';
 import { RichText } from '@/components/ui/RichText';
 
@@ -82,14 +83,25 @@ export function PlanItemCard({ item, index, className = '' }: PlanItemCardProps)
             {item.nameZh}
           </p>
 
-          {/* 训练量：这是本卡片的「一眼数字」 */}
-          <p className="tnum mt-1.5 font-mono text-base font-bold text-accent">
-            {formatVolume(item.metric, item.sets, item.targetPerSet)}
+          {/* 训练量：这是本卡片的「一眼数字」，档位徽章紧贴它，回答「今天练第几档」 */}
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span
+              className={[
+                'inline-flex items-center gap-1 rounded-pill px-1.5 py-0.5 text-[11px] font-bold',
+                isMain ? 'bg-accent-soft text-accent' : 'bg-surface2 text-muted',
+              ].join(' ')}
+            >
+              <Layers aria-hidden="true" className="h-3 w-3" />
+              {tierLabel(item.volumeTier)}
+            </span>
+            <span className="tnum font-mono text-base font-bold text-accent">
+              {formatVolume(item.metric, item.sets, item.targetPerSet)}
+            </span>
           </p>
 
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
             <span>
-              组间休息{' '}
+              组间休息参考{' '}
               <span className="tnum font-semibold text-text">
                 {item.restSeconds} 秒
               </span>

@@ -220,6 +220,7 @@ export type ReasonCode =
   | 'USER_EXCLUDE'
   | 'USER_ONLY'
   | 'VOLUME_SCALE'
+  | 'TIER_FLOOR'
   | 'PROGRESSION_READY'
   | 'RECOVERY_DAY'
   | 'SOFT_RETURN';
@@ -270,6 +271,15 @@ export interface PriorityBreakdown {
 export interface PlanOptions {
   /** 今天的实际可用时间 */
   availableMinutes?: SessionMinutes;
+  /**
+   * 今天的训练量档（0 初级 / 1 中级 / 2 升阶）。
+   *
+   * **只作用于当天，不写回长期进度。** 用来回答「我今天想练哪一档」——
+   * 不传时由引擎按 `max(长期进度, 时间档下限)` 自动决定；
+   * 用户想主动试更高档（例如「今天想试试升阶标准」）时可直接指定，
+   * 练完仍按完成度判定，做不到会被软降量，长期状态不会被污染。
+   */
+  volumeTierOverride?: number;
   /** 今天不练（软排除，仅影响当天，不写回长期状态） */
   excludeSkills?: ArtSlug[];
   /** 今天只想练这些（白名单） */
@@ -301,15 +311,22 @@ export interface DailyPlan {
   optional: PlanItem[];
 
   totalEstimatedMinutes: number;
-  /** 剩余分钟数（建议用于热身与拉伸） */
+  /**
+   * 热身分钟数（原书：以低难度版本做两组，约 3 分钟）。
+   * 与 `cooldownMinutes` 一起构成「固定开销」，参与剩余时间计算 ——
+   * 否则会出现「选了 60 分钟，剩余 52 分钟，全叫你去热身」这种荒谬结论。
+   */
+  warmupMinutes: number;
+  /** 训练后放松分钟数（原书不推荐系统冷却，只给最低额度 2 分钟） */
+  cooldownMinutes: number;
+  /** 真正富余的分钟数 = 可用时间 − 热身 − 训练 − 放松（已扣除固定开销） */
   freeMinutes: number;
 
   /** 一句话摘要（首页 / 计划页首屏） */
   summary: string;
   /**
-   * 训练提示（含「为什么 45 分钟只安排了 15 分钟」的诚实说明）。
-   * 原书训练量本就是短时段、低组数、不练到力竭，所以时间预算不填满 —— 这条必须显式讲清，
-   * 否则用户会以为系统算错了。
+   * 训练提示。必须把「热身 / 训练 / 放松」三段时间摆清楚，
+   * 并说明组间休息是参考值（原书不设具体秒数上限）。
    */
   tips: string[];
   /** 结构化理由 */

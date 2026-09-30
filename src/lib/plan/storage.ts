@@ -154,8 +154,10 @@ export function saveStore(store: TrainingStore): void {
  */
 export function migrate(input: Partial<TrainingStore>): TrainingStore {
   const base = createEmptyStore();
-  if (input.version !== STORAGE_VERSION) {
-    // 目前只有 v1；未来版本在此按 version 分支升级。
+  // v1 → v2：`DailyPlan` 新增了热身 / 放松分钟数与训练量档覆盖字段，
+  // 旧版固化的今日计划缺这些字段，直接丢弃（次日按日重算，无任何损失）；
+  // 训练历史与六艺进度**全部保留** —— 不能因为加个字段就抹掉用户练过的东西。
+  if (input.version !== 1 && input.version !== STORAGE_VERSION) {
     return base;
   }
 
@@ -174,7 +176,7 @@ export function migrate(input: Partial<TrainingStore>): TrainingStore {
     profile: input.profile ?? null,
     skills,
     sessions: (input.sessions ?? []).slice(0, SESSION_LIMIT),
-    todayPlan: input.todayPlan ?? null,
+    todayPlan: input.version === STORAGE_VERSION ? input.todayPlan ?? null : null,
   };
 }
 

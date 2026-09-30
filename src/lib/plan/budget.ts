@@ -108,16 +108,51 @@ interface BuildItemContext {
   minutes: SessionMinutes;
   volumeScale: number;
   skills: Record<ArtSlug, TrainingSkill>;
-  /** 主训是否满足「轻松完成」条件（决定 60 分钟档的 +1 档偏移是否生效） */
-  mainIsEasy: boolean;
+  /** 今日训练量档下限（由时间档给出） */
+  tierFloor: number;
+  /** 用户手动指定的今日训练量档（未指定时为 `undefined`） */
+  tierOverride?: number;
 }
 
-/** 该艺当前应当使用的训练量档（含软降量偏移） */
-function effectiveTier(snapshot: SkillSnapshot, skills: Record<ArtSlug, TrainingSkill>): number {
+/**
+ * 该艺今天应当使用的训练量档。
+ *
+ * **优先级从高到低**（这条顺序是本版修正的核心，不要调换）：
+ *
+ * 1. **软降量**：上次完成度崩过（< 0.60）→ 在原档基础上再降一档，
+ *    且**忽略时间档下限** —— 练不动的时候，时间多不代表该加量。
+ * 2. **用户手动指定**：`volumeTierOverride` 直接生效。这是「我今天想练哪一档」
+ *    的落点，允许用户主动试更高档而不用等引擎批准。
+ * 3. **长期进度与时间档下限取较高者**：`max(volumeTier, tierFloor)`。
+ *    冷启动用户 `volumeTier = 0`（初级 1 组），若选 45 / 60 分钟档，
+ *    下限会把它抬到升阶档 —— 这正是「选了 60 分钟却只练 8 分钟」的修法。
+ *
+ * 第 3 步额外带一层 **抬档保护**：从未练过、或最近刚失败过的项目最多只抬到中级档。
+ * 依据原书第十一章「慢工出细活」——「我总是建议新手：不管你多强，都要从第一个动作开始……
+ * 给自己留出至少四周的时间」。原书的路线本就是「先用初级标准起步，很快过渡到两组」，
+ * 而不是一上手就按升阶标准（3 组）去冲。
+ */
+function effectiveTier(
+  snapshot: SkillSnapshot,
+  skills: Record<ArtSlug, TrainingSkill>,
+  tierFloor: number,
+  tierOverride?: number,
+): number {
   const skill = skills[snapshot.slug];
   const maxTier = Math.max(0, snapshot.ladder.length - 1);
   const base = Math.min(snapshot.volumeTier, maxTier);
-  return skill.softDowngrade ? Math.max(0, base - 1) : base;
+
+  if (skill.softDowngrade) return Math.max(0, base - 1);
+  if (tierOverride !== undefined) {
+    return Math.min(maxTier, Math.max(0, Math.round(tierOverride)));
+  }
+
+  // 抬档保护：没有任何训练记录、或最近刚失败过 → 时间档下限最多抬到中级档（2 组）。
+  // 原书对新手的主张就是「先按初级标准起步，很快过渡到两组」，而不是一上手冲 3 组。
+  const canRaise = snapshot.daysSinceLast !== null && skill.consecutiveFail === 0;
+  const effectiveFloor = canRaise ? tierFloor : Math.min(tierFloor, 1);
+
+  return Math.min(maxTier, Math.max(base, effectiveFloor));
 }
 
 /** 组数缩放（`volumeScale` 只作用于组数，不轻易动单组次数） */
@@ -128,8 +163,8 @@ function scaleSets(sets: number, scale: number): number {
 /**
  * 组装主训练项。
  *
- * 主训可以选择「取该艺当前配得上的一档，或选择下一档更有挑战的方案」——
- * 但默认走 `volumeTier`，只有连续轻松完成后才由用户确认升档（§8.1 的难度 / 训练量分离）。
+ * 主训取「该艺今天配得上的档」（见 `effectiveTier` 的三级优先级）。
+ * 组数、单组次数都来自原书 `trainingGoal` 派生的阶梯，**引擎不改写次数**。
  */
 export function buildMainItem(
   snapshot: SkillSnapshot,
@@ -137,11 +172,10 @@ export function buildMainItem(
   ctx: BuildItemContext,
 ): PlanItem {
   const budget = MINUTE_BUDGET[ctx.minutes];
-  const tierIndex = effectiveTier(snapshot, ctx.skills);
+  const tierIndex = effectiveTier(snapshot, ctx.skills, ctx.tierFloor, ctx.tierOverride);
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
-  const offset = ctx.mainIsEasy ? budget.mainVolumeOffset : 0;
 
-  const sets = scaleSets(tier.sets + offset, ctx.volumeScale);
+  const sets = scaleSets(tier.sets, ctx.volumeScale);
   const { nameZh, nameEn } = nameOf(snapshot.slug, snapshot.currentStep);
 
   return {
@@ -180,7 +214,7 @@ export function buildAssistItem(
 ): PlanItem {
   const budget = MINUTE_BUDGET[ctx.minutes];
   const { snapshot } = candidate;
-  const tierIndex = effectiveTier(snapshot, ctx.skills);
+  const tierIndex = effectiveTier(snapshot, ctx.skills, ctx.tierFloor, ctx.tierOverride);
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
   const sets = scaleSets(

@@ -9,16 +9,27 @@
  * 这样「它们是一组」的联系由形状承担，颜色只负责回答「这是哪一个」。
  * 时间档四项同形同色（action 橙）；六艺 chips 同形但各带本门色相（标识是哪门艺）。
  */
-import { Minus, Plus, RefreshCw, RotateCcw, Timer } from 'lucide-react';
+import { Layers, Minus, Plus, RefreshCw, RotateCcw, Timer } from 'lucide-react';
 import type { ArtSlug } from '@/types';
 import type { DailyPlan, PlanOptions, SessionMinutes } from '@/types/plan';
 import { ART_ORDER } from '@/lib/constants';
 import { artTheme } from '@/lib/artTheme';
 import { getArt } from '@/data';
+import { MINUTE_BUDGET, TIER_NAME_CN, tierLabel } from '@/lib/plan/config';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
 
 const MINUTES_OPTIONS: SessionMinutes[] = [15, 30, 45, 60];
+
+/** 训练量档三选一（0 初级 / 1 中级 / 2 升阶） */
+const TIER_OPTIONS = [0, 1, 2] as const;
+
+/** 各档的通俗说明（直接抄原书第十一章的立场，不做发挥） */
+const TIER_HINT: Record<number, string> = {
+  0: '1 组。原书里的起步门槛，刚换到新一式的头几次用它。',
+  1: '2 组。原书说「我通常建议练习两组」—— 这才是日常训练量。',
+  2: '2–3 组（按该式阶梯）。准备冲下一式时用。',
+};
 
 /** `AdjustSheet` 的 props */
 export interface AdjustSheetProps {
@@ -44,6 +55,22 @@ export function AdjustSheet({
 }: AdjustSheetProps) {
   const excludeSkills = plan.appliedOptions.excludeSkills ?? [];
   const scale = plan.appliedOptions.volumeScale ?? 1;
+  const override = plan.appliedOptions.volumeTierOverride;
+
+  /** 今天实际用到的档位（各门可能不同，取集合用于显示） */
+  const activeTiers = Array.from(
+    new Set(
+      [plan.main, ...plan.assists]
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+        .map((item) => item.volumeTier),
+    ),
+  ).sort();
+  const activeTierText =
+    activeTiers.length === 0
+      ? '—'
+      : activeTiers.length === 1
+        ? tierLabel(activeTiers[0])
+        : activeTiers.map((tier) => tierLabel(tier)).join(' / ');
 
   return (
     <Sheet
@@ -74,7 +101,11 @@ export function AdjustSheet({
                   type="button"
                   role="radio"
                   aria-checked={active}
-                  onClick={() => patchPlan({ availableMinutes: minutes })}
+                  onClick={() =>
+                    // 改时间档同时清掉手动的档位指定：时间档自带档位下限，
+                    // 两者叠加会让「选 15 分钟却按升阶档练」这种组合出现。
+                    patchPlan({ availableMinutes: minutes, volumeTierOverride: undefined })
+                  }
                   className={[
                     'tnum min-h-[52px] rounded-md border text-sm font-bold transition-colors',
                     active
@@ -140,7 +171,67 @@ export function AdjustSheet({
           </div>
         </div>
 
-        {/* ③ 今天不想练哪门 —— 平级 chips，各带本门色相 */}
+        {/* ③ 今天的训练量档 —— 三选一 + 自动 */}
+        <div>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+            <p className="flex items-center gap-1.5 text-sm font-bold text-text">
+              <Layers aria-hidden="true" className="h-4 w-4 text-accent" />
+              今天的训练量档
+            </p>
+            <p className="text-xs text-muted">
+              当前 <span className="font-semibold text-text">{activeTierText}</span>
+            </p>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            档位来自原书每一式的「初级 / 中级 / 升阶标准」，指的是做几组。
+            不指定时自动取「你在这一门上的长期进度」与「时间档给的底线」里较高的那个
+            （{plan.availableMinutes} 分钟档的底线是
+            {tierLabel(MINUTE_BUDGET[plan.availableMinutes].tierFloor)}）。
+          </p>
+          <div role="radiogroup" aria-label="今天的训练量档" className="mt-2.5 grid grid-cols-3 gap-2">
+            {TIER_OPTIONS.map((tier) => {
+              const active = override === tier;
+              return (
+                <button
+                  key={tier}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => patchPlan({ volumeTierOverride: tier })}
+                  className={[
+                    'min-h-[52px] rounded-md border text-sm font-bold transition-colors',
+                    active
+                      ? 'border-accent bg-accent text-bg'
+                      : 'border-border-strong bg-surface text-text hover:border-accent',
+                  ].join(' ')}
+                >
+                  {TIER_NAME_CN[tier]}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            {override === undefined
+              ? `自动：按各门自己的进度来，不低于时间档底线。${TIER_HINT[1]}`
+              : TIER_HINT[override]}
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted">
+            想试更高档不用等系统批准 —— 直接选，练完照常按完成度判定；
+            做不到只影响今天的记录，不会改掉长期进度。
+          </p>
+          {override !== undefined ? (
+            <button
+              type="button"
+              onClick={() => patchPlan({ volumeTierOverride: undefined })}
+              className="mt-2 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+              恢复自动
+            </button>
+          ) : null}
+        </div>
+
+        {/* ④ 今天不想练哪门 —— 平级 chips，各带本门色相 */}
         <div>
           <p className="text-sm font-bold text-text">今天不想练哪门？</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
@@ -178,7 +269,7 @@ export function AdjustSheet({
           </ul>
         </div>
 
-        {/* ④ 其他操作 */}
+        {/* ⑤ 其他操作 */}
         <div className="flex flex-col gap-2.5 border-t border-border pt-5">
           {plan.main ? (
             <Button
