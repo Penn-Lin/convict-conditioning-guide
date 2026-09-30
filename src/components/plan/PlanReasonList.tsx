@@ -30,6 +30,7 @@ const CODE_TONE: Partial<Record<ReasonCode, NoteTone>> = {
   USER_EXCLUDE: 'info',
   USER_ONLY: 'info',
   VOLUME_SCALE: 'info',
+  TIER_FLOOR: 'info',
   PROGRESSION_READY: 'good',
   RECOVERY_DAY: 'info',
   SOFT_RETURN: 'risk',
