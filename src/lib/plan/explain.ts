@@ -14,6 +14,7 @@ import type {
   PlanOptions,
   PlanReason,
   PriorityBreakdown,
+  ScheduleMode,
   SkillSnapshot,
 } from '@/types/plan';
 import { getArt } from '@/data';
@@ -24,6 +25,8 @@ import {
   LOAD_TYPE_LABEL,
   OVERLAP_MATRIX,
   RECOVERY,
+  TEXTBOOK_REST_DAYS,
+  tierLabel,
 } from './config';
 import type { AssistCandidate } from './select';
 import { formatVolume } from './volumeLadder';
@@ -159,6 +162,25 @@ export interface ExplainInput {
   kind: 'training' | 'recovery';
   /** 今日训练量档的说明（时间档抬高档位 / 用户手动指定时非 null） */
   tierNote?: string | null;
+  /**
+   * 原书模板模式的排期说明（`auto` 模式下不传）。
+   *
+   * 这是 v4 分叉点的唯一解释入口：用户必须能一眼看出
+   * 「今天为什么是这几门」不是引擎算的，而是原书的固定清单 + 恢复间隔。
+   */
+  schedule?: {
+    mode: ScheduleMode;
+    name: string;
+    tagline: string;
+    daysPerWeek: number;
+    source: string;
+    /** 本次实际采用的训练量档 */
+    tier: number;
+    /** 因距上次训练不足而今天不排的科目名 */
+    resting: string[];
+    /** 是否走了「全部未到期」的兜底（昨天刚练过） */
+    allResting: boolean;
+  };
 }
 
 /** 生成完整的 `PlanReason[]`（UI 直接渲染，无需自己拼文案） */
@@ -176,6 +198,7 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
     returned,
     kind,
     tierNote,
+    schedule,
   } = input;
 
   // ① 用户调整（优先展示，让用户知道「因为你的调整，计划变成了这样」）
@@ -214,6 +237,28 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
       code: 'TIER_FLOOR',
       text: tierNote,
       values: { tier: options.volumeTierOverride ?? -1 },
+    });
+  }
+
+  // ①c 原书模板模式：说清「科目不是算出来的，是原书定的」
+  if (schedule) {
+    const restingText =
+      schedule.resting.length > 0
+        ? `其中 ${schedule.resting.join('、')}距上次训练不足 ${TEXTBOOK_REST_DAYS} 天，今天不排。`
+        : '';
+    reasons.push({
+      code: schedule.allResting ? 'TEXTBOOK_ALL_RESTING' : 'TEXTBOOK_SCHEDULE',
+      text: schedule.allResting
+        ? `今天所有科目距上次训练都不足 ${TEXTBOOK_REST_DAYS} 天（昨天刚练过）。按原书「如果你觉得并无大碍还可以训练，那就练些低难度的动作」，本次保留全部科目但统一降到${tierLabel(0)}（每门 1 组）。`
+        : `按原书「${schedule.name}」安排：${schedule.tagline}。科目由原书清单决定，与今天是星期几无关 —— 距上次训练满 ${TEXTBOOK_REST_DAYS} 天的科目今天到期，一共 ${
+            countDecision.total
+          } 项。每一项按${tierLabel(schedule.tier)}安排，这是原书「我通常建议练习两组」的日常量。${restingText}`,
+      values: { tier: schedule.tier, items: countDecision.total },
+    });
+    reasons.push({
+      code: 'TEXTBOOK_SOURCE',
+      text: schedule.source,
+      values: {},
     });
   }
 

@@ -9,17 +9,40 @@
  * 这样「它们是一组」的联系由形状承担，颜色只负责回答「这是哪一个」。
  * 时间档四项同形同色（action 橙）；六艺 chips 同形但各带本门色相（标识是哪门艺）。
  */
-import { Layers, Minus, Plus, RefreshCw, RotateCcw, Timer } from 'lucide-react';
+import { CalendarRange, Layers, Minus, Plus, RefreshCw, RotateCcw, Sparkles, Timer } from 'lucide-react';
 import type { ArtSlug } from '@/types';
-import type { DailyPlan, PlanOptions, SessionMinutes } from '@/types/plan';
+import type { DailyPlan, PlanOptions, ScheduleMode, SessionMinutes } from '@/types/plan';
 import { ART_ORDER } from '@/lib/constants';
 import { artTheme } from '@/lib/artTheme';
 import { getArt } from '@/data';
-import { MINUTE_BUDGET, TIER_NAME_CN, tierLabel } from '@/lib/plan/config';
+import { MINUTE_BUDGET, TEXTBOOK_PLANS, TIER_NAME_CN, tierLabel } from '@/lib/plan/config';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
 
 const MINUTES_OPTIONS: SessionMinutes[] = [15, 30, 45, 60];
+
+/** 排期模式三选一（顺序即展示顺序） */
+const SCHEDULE_OPTIONS: readonly {
+  value: ScheduleMode;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: 'textbook-steady',
+    label: TEXTBOOK_PLANS['textbook-steady'].name,
+    hint: `${TEXTBOOK_PLANS['textbook-steady'].tagline} · 原书推荐`,
+  },
+  {
+    value: 'textbook-beginner',
+    label: TEXTBOOK_PLANS['textbook-beginner'].name,
+    hint: TEXTBOOK_PLANS['textbook-beginner'].tagline,
+  },
+  {
+    value: 'auto',
+    label: '自动调度',
+    hint: '按恢复、疲劳与负荷重叠每天重算',
+  },
+];
 
 /** 训练量档三选一（0 初级 / 1 中级 / 2 升阶） */
 const TIER_OPTIONS = [0, 1, 2] as const;
@@ -38,6 +61,10 @@ export interface AdjustSheetProps {
   plan: DailyPlan;
   patchPlan: (patch: Partial<PlanOptions>) => void;
   resetPlanOptions: () => void;
+  /** 当前生效的排期模式（当天指定 > 档案偏好 > auto） */
+  scheduleMode: ScheduleMode;
+  /** 切换**长期**排期模式（写回档案，不只是今天） */
+  onScheduleModeChange: (mode: ScheduleMode) => void;
 }
 
 /**
@@ -52,6 +79,8 @@ export function AdjustSheet({
   plan,
   patchPlan,
   resetPlanOptions,
+  scheduleMode,
+  onScheduleModeChange,
 }: AdjustSheetProps) {
   const excludeSkills = plan.appliedOptions.excludeSkills ?? [];
   const delta = plan.appliedOptions.setsDelta ?? 0;
@@ -86,7 +115,61 @@ export function AdjustSheet({
       }
     >
       <div className="flex flex-col gap-6 pt-1">
-        {/* ① 时间档 —— 平级四项，同形同色 */}
+        {/* ① 训练安排方式 —— 决定「今天练哪几门」，是最上层的一个开关 */}
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-bold text-text">
+            <CalendarRange aria-hidden="true" className="h-4 w-4 text-accent" />
+            训练安排方式
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            决定「今天练哪几门」。<b>长期设置</b>，改一次之后每天都按它排，不是只影响今天。
+          </p>
+          <div role="radiogroup" aria-label="训练安排方式" className="mt-2.5 flex flex-col gap-2">
+            {SCHEDULE_OPTIONS.map((option) => {
+              const active = option.value === scheduleMode;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => onScheduleModeChange(option.value)}
+                  className={[
+                    'flex min-h-[52px] items-center gap-3 rounded-md border p-3 text-left transition-colors',
+                    active
+                      ? 'border-accent bg-accent-soft'
+                      : 'border-border bg-surface hover:border-border-strong',
+                  ].join(' ')}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={[
+                      'flex h-5 w-5 shrink-0 items-center justify-center rounded-pill border-2',
+                      active ? 'border-accent' : 'border-border-strong',
+                    ].join(' ')}
+                  >
+                    {active ? <span className="h-2.5 w-2.5 rounded-pill bg-accent" /> : null}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-text">{option.label}</span>
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                      {option.hint}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {scheduleMode !== 'auto' ? (
+            <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-muted">
+              <Sparkles aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet" />
+              原书模板下科目由清单固定，与星期几无关：距上次训练满 2 天的科目今天就会排进来。
+              隔天练时六门全部到期，所以每次都是全练。
+            </p>
+          ) : null}
+        </div>
+
+        {/* ② 时间档 —— 平级四项，同形同色 */}
         <div>
           <p className="flex items-center gap-1.5 text-sm font-bold text-text">
             <Timer aria-hidden="true" className="h-4 w-4 text-accent" />
@@ -121,7 +204,7 @@ export function AdjustSheet({
           </div>
         </div>
 
-        {/* ② 训练量微调（±1 组） */}
+        {/* ③ 训练量微调（±1 组） */}
         <div>
           <p className="text-sm font-bold text-text">训练量</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
@@ -183,7 +266,7 @@ export function AdjustSheet({
           </p>
         </div>
 
-        {/* ③ 今天的训练量档 —— 三选一 + 自动 */}
+        {/* ④ 今天的训练量档 —— 三选一 + 自动 */}
         <div>
           <div className="flex flex-wrap items-baseline justify-between gap-x-2">
             <p className="flex items-center gap-1.5 text-sm font-bold text-text">
@@ -243,7 +326,7 @@ export function AdjustSheet({
           ) : null}
         </div>
 
-        {/* ④ 今天不想练哪门 —— 平级 chips，各带本门色相 */}
+        {/* ⑤ 今天不想练哪门 —— 平级 chips，各带本门色相 */}
         <div>
           <p className="text-sm font-bold text-text">今天不想练哪门？</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
@@ -281,7 +364,7 @@ export function AdjustSheet({
           </ul>
         </div>
 
-        {/* ⑤ 其他操作 */}
+        {/* ⑥ 其他操作 */}
         <div className="flex flex-col gap-2.5 border-t border-border pt-5">
           {plan.main ? (
             <Button

@@ -17,6 +17,7 @@ import type {
   FatigueScore,
   PlanOptions,
   ProgressionVerdict,
+  ScheduleMode,
   TrainingState,
   WorkoutExercise,
   WorkoutSession,
@@ -27,7 +28,14 @@ import { ART_ORDER } from '@/lib/constants';
 import { generateDailyPlan, replan as replanEngine } from '@/lib/plan';
 import { MINUTE_BUDGET } from '@/lib/plan/config';
 import { applyVerdict, judgeSession, summarizeOutcome } from '@/lib/plan/progression';
-import { clampStep, createEmptyStore, loadStore, pushSessionSummary, saveStore } from '@/lib/plan/storage';
+import {
+  clampStep,
+  createEmptyStore,
+  defaultScheduleMode,
+  loadStore,
+  pushSessionSummary,
+  saveStore,
+} from '@/lib/plan/storage';
 import type { OnboardingAnswers, TrainingStore } from '@/lib/plan/storage';
 import { ladderFor } from '@/lib/plan/snapshot';
 import { inferTier } from '@/lib/plan/volumeLadder';
@@ -94,6 +102,8 @@ export interface UseTrainingStateResult {
   setStep: (slug: ArtSlug, step: number) => void;
   setExcluded: (slug: ArtSlug, excluded: boolean) => void;
   resetAll: () => void;
+  /** 切换长期排期模式（自动调度 / 原书模板），写回档案 */
+  setScheduleMode: (mode: ScheduleMode) => void;
 
   /* ---- 进度打卡 ---- */
   toggleStepCheck: (slug: ArtSlug, stepNo: number, index: number) => void;
@@ -196,6 +206,8 @@ export function useTrainingState(): UseTrainingStateResult {
               sessionMinutes: answers.sessionMinutes,
               level: answers.level,
               selfReport: answers.selfReport,
+              // 引导页不新增问题，按自评水平推导默认排期模式（新手 → 初试身手）
+              scheduleMode: answers.scheduleMode ?? defaultScheduleMode(answers.level),
             },
           },
         };
@@ -233,6 +245,29 @@ export function useTrainingState(): UseTrainingStateResult {
   const resetAll = useCallback(() => {
     commit(() => createEmptyStore());
   }, [commit]);
+
+  /**
+   * 切换长期排期模式（写回档案，不只是当天）。
+   *
+   * 同时清掉 `todayPlan` —— 模式变了，当天已固化的计划就不再有效，
+   * 让下一次渲染按新模式重算。
+   */
+  const setScheduleMode = useCallback(
+    (mode: ScheduleMode) => {
+      commit((prev) => {
+        if (!prev.profile) return prev;
+        return {
+          ...prev,
+          profile: {
+            ...prev.profile,
+            onboarding: { ...prev.profile.onboarding, scheduleMode: mode },
+          },
+          todayPlan: null,
+        };
+      });
+    },
+    [commit],
+  );
 
   /* -------------------------------------------------------------------------
    * 进度打卡
@@ -494,6 +529,7 @@ export function useTrainingState(): UseTrainingStateResult {
     setStep,
     setExcluded,
     resetAll,
+    setScheduleMode,
     toggleStepCheck,
     completeStep,
     undoStep,

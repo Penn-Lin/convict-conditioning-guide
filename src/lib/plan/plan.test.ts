@@ -18,14 +18,21 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ArtSlug } from '@/types';
-import type { SessionSummary, TrainingSkill, TrainingState, WorkoutSession } from '@/types/plan';
+import type {
+  SessionMinutes,
+  SessionSummary,
+  TrainingSkill,
+  TrainingState,
+  WorkoutSession,
+} from '@/types/plan';
 import { ART_ORDER } from '@/lib/constants';
 import { splitProgressionGoals } from '@/lib/checklist';
 import { highlight, highlightStats } from '@/lib/highlight';
 
-import { generateDailyPlan, replan, weekCompletedCount } from './index';
+import { generateDailyPlan, replan, resolveScheduleMode, weekCompletedCount } from './index';
 import { buildSnapshots } from './snapshot';
 import { applyGate } from './gate';
+import { MINUTE_BUDGET } from './config';
 import { judgeSession, summarizeOutcome } from './progression';
 import { parseVolumeLadder, inferTier } from './volumeLadder';
 
@@ -34,6 +41,20 @@ import { parseVolumeLadder, inferTier } from './volumeLadder';
  * ------------------------------------------------------------------------ */
 
 const TODAY = '2026-09-30';
+
+/** 日期加减（`'YYYY-MM-DD'`）—— 模板模式测试用 */
+function shiftDate(date: string, deltaDays: number): string {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + deltaDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+}
+
+/** 按指定时间档生成计划（模板模式测试用） */
+function planOf(state: TrainingState, minutes: SessionMinutes) {
+  return generateDailyPlan(state, { today: TODAY, availableMinutes: minutes });
+}
 
 /** 造一条训练摘要 */
 function summary(date: string, ratio: number, fatigue: number): SessionSummary {
@@ -660,6 +681,176 @@ describe('tierFloor · 时间档决定训练量的底线', () => {
 });
 
 /* ---------------------------------------------------------------------------
+ * 5c. 原书模板模式（v4 新增 · 只替换「今天练哪几门」这一层）
+ * ------------------------------------------------------------------------ */
+
+describe('textbook · 原书模板的科目解析', () => {
+  /** 造一个「N 天前练过」的六艺状态 */
+  function stateTrainedDaysAgo(days: number | null, minutes: SessionMinutes = 45): TrainingState {
+    const skills = {} as Record<ArtSlug, TrainingSkill>;
+    for (const slug of ART_ORDER) {
+      skills[slug] = skill(slug, 1, 0, {
+        lastTrainedAt:
+          days === null ? null : shiftDate(TODAY, -days) + 'T20:00:00',
+        lastFatigue: 3,
+        sessions:
+          days === null
+            ? []
+            : [summary(shiftDate(TODAY, -days), 1.0, 3)],
+      });
+    }
+    return {
+      today: TODAY,
+      now: `${TODAY}T08:00:00`,
+      profile: {
+        id: 'demo',
+        createdAt: '2026-09-01T08:00:00',
+        onboarding: {
+          daysPerWeek: 3,
+          sessionMinutes: minutes,
+          level: 'some',
+          selfReport: {},
+          scheduleMode: 'textbook-steady',
+        },
+      },
+      skills,
+      sessions: [],
+    };
+  }
+
+  it('渐入佳境：距上次训练满 2 天 → 六艺全练', () => {
+    const plan = generateDailyPlan(stateTrainedDaysAgo(2), { today: TODAY });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all).toHaveLength(6);
+    expect(all.map((item) => item.skill).sort()).toEqual([...ART_ORDER].sort());
+    expect(plan.reasons.some((reason) => reason.code === 'TEXTBOOK_SCHEDULE')).toBe(true);
+    expect(plan.reasons.some((reason) => reason.code === 'TEXTBOOK_SOURCE')).toBe(true);
+  });
+
+  it('距上次训练只有 1 天 → 该门今天不排（但保留「不返回空计划」的兜底）', () => {
+    const state = stateTrainedDaysAgo(2);
+    // 把「桥」改成昨天刚练过
+    state.skills.bridges = skill('bridges', 1, 0, {
+      lastTrainedAt: `${shiftDate(TODAY, -1)}T20:00:00`,
+      lastFatigue: 3,
+      sessions: [summary(shiftDate(TODAY, -1), 1.0, 3)],
+    });
+
+    const plan = generateDailyPlan(state, { today: TODAY });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all).toHaveLength(5);
+    expect(all.map((item) => item.skill)).not.toContain('bridges');
+    expect(plan.reasons.some((reason) => reason.code === 'TEXTBOOK_SCHEDULE')).toBe(true);
+  });
+
+  it('六门全部未到期（连续两天练）→ 兜底：全排 + 统一降到初级档', () => {
+    const plan = generateDailyPlan(stateTrainedDaysAgo(1), { today: TODAY });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all).toHaveLength(6);
+    // 文案承诺「统一降到初级档」，代码必须真的做到
+    expect(all.every((item) => item.volumeTier === 0)).toBe(true);
+    expect(all.every((item) => item.sets === 1)).toBe(true);
+    expect(plan.reasons.some((reason) => reason.code === 'TEXTBOOK_ALL_RESTING')).toBe(true);
+  });
+
+  it('初试身手：只含四艺，桥与倒立撑不在今天的科目里', () => {
+    const state = stateTrainedDaysAgo(2);
+    state.profile.onboarding.scheduleMode = 'textbook-beginner';
+    const plan = generateDailyPlan(state, { today: TODAY });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all.map((item) => item.skill).sort()).toEqual(
+      ['leg-raises', 'pullups', 'pushups', 'squats'].sort(),
+    );
+  });
+
+  it('时间档 → 档位：装得下就用中级档，装不下才退到初级档', () => {
+    const mid = [planOf(stateTrainedDaysAgo(2, 45), 45), planOf(stateTrainedDaysAgo(2, 60), 60)];
+    for (const plan of mid) {
+      expect(plan.main?.volumeTier).toBe(1);
+      expect(plan.main?.sets).toBe(2);
+    }
+
+    // 15 分钟档放不下「六艺 × 2 组」（约 33 分钟），退到初级档
+    const narrow = planOf(stateTrainedDaysAgo(2, 15), 15);
+    expect(narrow.main?.volumeTier).toBe(0);
+    expect(narrow.main?.sets).toBe(1);
+    expect(
+      narrow.warmupMinutes + narrow.totalEstimatedMinutes + narrow.cooldownMinutes,
+    ).toBeLessThanOrEqual(15);
+  });
+
+  it('训练量档位由时间档决定，但仍受「手动指定档位」覆盖', () => {
+    const state = stateTrainedDaysAgo(2, 45);
+    const overridden = generateDailyPlan(state, { today: TODAY, volumeTierOverride: 2 });
+    expect(overridden.main?.volumeTier).toBe(2);
+    expect(overridden.main?.sets).toBe(3);
+  });
+
+  it('辅助组数不受「辅助上限」压制 —— 六门是平级科目', () => {
+    const plan = planOf(stateTrainedDaysAgo(2, 45), 45);
+    for (const item of plan.assists) {
+      // 倒立撑第 1 式是保持型，阶梯本身只有 1 组；其余辅助应与主训同为 2 组
+      if (item.metric === 'hold') continue;
+      expect(item.sets).toBe(2);
+    }
+  });
+
+  it('模板模式下没有加练自选池（科目已由原书清单定满）', () => {
+    expect(planOf(stateTrainedDaysAgo(2, 45), 45).optional).toEqual([]);
+  });
+
+  it('用户主动排除某门仍然生效（作用于模板清单之上）', () => {
+    const state = stateTrainedDaysAgo(2, 45);
+    const plan = generateDailyPlan(state, { today: TODAY, excludeSkills: ['handstand-pushups'] });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all).toHaveLength(5);
+    expect(all.map((item) => item.skill)).not.toContain('handstand-pushups');
+  });
+
+  it('模式解析优先级：当天指定 > 档案偏好 > auto', () => {
+    const state = stateTrainedDaysAgo(2, 45);
+    expect(resolveScheduleMode(state, {})).toBe('textbook-steady');
+    expect(resolveScheduleMode(state, { scheduleMode: 'auto' })).toBe('auto');
+
+    const legacy: TrainingState = {
+      ...state,
+      profile: {
+        ...state.profile,
+        onboarding: { ...state.profile.onboarding, scheduleMode: undefined },
+      },
+    };
+    expect(resolveScheduleMode(legacy, {})).toBe('auto');
+  });
+
+  it('与 auto 模式共用同一套下游：组数 / 单组次数 / 休息 / 时间账都不重写', () => {
+    const state = stateTrainedDaysAgo(2, 45);
+    const template = generateDailyPlan(state, { today: TODAY });
+    const auto = generateDailyPlan(state, {
+      today: TODAY,
+      scheduleMode: 'auto',
+    });
+
+    // 两种模式的差异**只**体现在科目清单上，单项结构完全相同
+    expect(Object.keys(template.main ?? {}).sort()).toEqual(
+      Object.keys(auto.main ?? {}).sort(),
+    );
+    expect(template.main?.restSeconds).toBe(MINUTE_BUDGET[45].restSeconds);
+    expect(template.warmupMinutes).toBe(3);
+    expect(template.cooldownMinutes).toBe(2);
+  });
+});
+
+/* ---------------------------------------------------------------------------
  * 6. 阶梯解析与工具函数
  * ------------------------------------------------------------------------ */
 
@@ -687,7 +878,7 @@ describe('storage · v1 → v2 迁移不丢数据', () => {
 
     const out = migrate(v1 as Parameters<typeof migrate>[0]);
 
-    expect(out.version).toBe(3);
+    expect(out.version).toBe(4);
     expect(out.sessions).toHaveLength(1);
     expect(out.skills.pushups.currentStep).toBe(4);
     expect(out.skills.pushups.lastTrainedAt).toBe('2026-09-29T12:00:00');
@@ -705,7 +896,7 @@ describe('storage · v1 → v2 迁移不丢数据', () => {
     };
 
     const out = migrate(v2 as unknown as Parameters<typeof migrate>[0]);
-    expect(out.version).toBe(3);
+    expect(out.version).toBe(4);
     expect(out.sessions).toHaveLength(1);
     expect(out.skills.squats.currentStep).toBe(3);
     expect(out.todayPlan).toBeNull();
@@ -714,7 +905,7 @@ describe('storage · v1 → v2 迁移不丢数据', () => {
   it('完全无法识别的版本安全降级为空状态，不抛异常', async () => {
     const { migrate } = await import('./storage');
     const out = migrate({ version: 99 } as unknown as Parameters<typeof migrate>[0]);
-    expect(out.version).toBe(3);
+    expect(out.version).toBe(4);
     expect(out.sessions).toEqual([]);
     expect(out.profile).toBeNull();
   });

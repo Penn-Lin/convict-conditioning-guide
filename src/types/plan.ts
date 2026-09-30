@@ -65,6 +65,11 @@ export interface UserProfile {
     level: SelfLevel;
     /** 用户逐项填写的当前式号 / 能完成的次数（可空） */
     selfReport: Partial<Record<ArtSlug, { step?: number; maxReps?: number }>>;
+    /**
+     * 排期模式（v4 新增）。缺失时按 `auto` 处理（老存档不惊动）。
+     * 引导阶段由自评水平推导默认值，之后可在训练页随时切换。
+     */
+    scheduleMode?: ScheduleMode;
   };
 }
 
@@ -221,6 +226,9 @@ export type ReasonCode =
   | 'USER_ONLY'
   | 'SETS_DELTA'
   | 'TIER_FLOOR'
+  | 'TEXTBOOK_SCHEDULE'
+  | 'TEXTBOOK_ALL_RESTING'
+  | 'TEXTBOOK_SOURCE'
   | 'PROGRESSION_READY'
   | 'RECOVERY_DAY'
   | 'SOFT_RETURN';
@@ -270,6 +278,24 @@ export interface PriorityBreakdown {
 /** 组数微调：比今天档位少一组 / 不变 / 多一组 */
 export type SetsDelta = -1 | 0 | 1;
 
+/**
+ * 排期模式（本版新增）—— 决定「今天练哪几门」这一层由谁负责。
+ *
+ * 引擎分三步：① 选科目 → ② 定训练量 → ③ 时间账与闭环。
+ * 本字段**只替换第 ① 步**，②③ 完全不区分模式。
+ *
+ * | 值 | 科目来源 | 依据 |
+ * |---|---|---|
+ * | `auto` | 引擎按恢复 / 完成度 / 疲劳 / 负荷重叠动态算 | 本站自研，适合生活不规律 |
+ * | `textbook-beginner` | 固定四艺（俯卧撑 / 深蹲 / 引体 / 举腿） | 原书「初试身手」 |
+ * | `textbook-steady` | 固定六艺全部 | 原书「渐入佳境」 |
+ *
+ * 前两者**不绑定星期几**：科目 = `距上次训练 ≥ TEXTBOOK_REST_DAYS 天` 的艺。
+ * 隔天练时六门全部到期 → 每次都是六艺全练；一周出现 3 次还是 4 次都不用特殊处理
+ * （隔天 = 7÷2 = 3.5 次/周，本就是 4 次周与 3 次周交替）。
+ */
+export type ScheduleMode = 'auto' | 'textbook-beginner' | 'textbook-steady';
+
 /** 用户对计划的主动修改 —— 所有计划变体的唯一入参 */
 export interface PlanOptions {
   /** 今天的实际可用时间 */
@@ -300,6 +326,8 @@ export interface PlanOptions {
   onlySkills?: ArtSlug[];
   /** 「换一个方案」：排除当前主训后重算（确定性，非随机） */
   avoidMain?: ArtSlug;
+  /** 当天临时切换排期模式（只作用于今天，不写回档案） */
+  scheduleMode?: ScheduleMode;
   /** 'YYYY-MM-DD'；引擎**不取系统时间**，一律由调用方传入 */
   today?: string;
   /** 强制指定当日类型（恢复日兜底用） */

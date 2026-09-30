@@ -25,13 +25,15 @@ import {
   Lightbulb,
   ListChecks,
   Rocket,
+  Route,
   Settings2,
   SlidersHorizontal,
   TrendingUp,
 } from 'lucide-react';
-import type { ProgressionVerdict } from '@/types/plan';
+import type { ProgressionVerdict, ScheduleMode } from '@/types/plan';
 import { ART_ORDER, MOVES_PER_ART, SITE_NAME } from '@/lib/constants';
 import { formatDateCn, weekStart } from '@/lib/plan/time';
+import { textbookPlanOf } from '@/lib/plan/template';
 import { useDocumentMeta } from '@/lib/seo';
 import { useTraining } from '@/hooks/TrainingProvider';
 
@@ -61,7 +63,15 @@ export function Plan() {
     completeOnboarding,
     finishSession,
     completeStep,
+    setScheduleMode,
   } = useTraining();
+
+  /** 当前生效的排期模式（当天指定 > 档案偏好 > auto） */
+  const scheduleMode: ScheduleMode =
+    plan?.appliedOptions.scheduleMode ??
+    store.profile?.onboarding.scheduleMode ??
+    'auto';
+  const textbook = textbookPlanOf(scheduleMode);
 
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
@@ -124,10 +134,19 @@ export function Plan() {
         <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-text">
           训练
         </h1>
-        <p className="tnum mt-1 flex items-center gap-1.5 text-xs text-muted">
+        <p className="tnum mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
           <CalendarDays aria-hidden="true" className="h-3.5 w-3.5" />
           {formatDateCn(today)}
           {plan.revision > 0 ? ` · 已调整 ${plan.revision} 次` : ''}
+          <span
+            className={[
+              'inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[11px] font-bold',
+              textbook ? 'bg-violet-soft text-violet' : 'bg-surface2 text-muted',
+            ].join(' ')}
+          >
+            <Route aria-hidden="true" className="h-3 w-3" />
+            {textbook ? `原书 · ${textbook.name}` : '自动调度'}
+          </span>
         </p>
       </header>
 
@@ -354,6 +373,8 @@ export function Plan() {
         plan={plan}
         patchPlan={patchPlan}
         resetPlanOptions={resetPlanOptions}
+        scheduleMode={scheduleMode}
+        onScheduleModeChange={setScheduleMode}
       />
       <LogSheet
         open={logOpen}

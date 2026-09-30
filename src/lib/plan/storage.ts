@@ -9,6 +9,7 @@
 import type { ArtSlug } from '@/types';
 import type {
   DailyPlan,
+  ScheduleMode,
   SelfLevel,
   SessionMinutes,
   TrainingSkill,
@@ -74,6 +75,26 @@ export interface OnboardingAnswers {
   level: SelfLevel;
   /** 逐项自报（可空，可只填一部分） */
   selfReport: Partial<Record<ArtSlug, { step?: number; maxReps?: number }>>;
+  /**
+   * 排期模式（可选）。
+   *
+   * **引导页不新增问题**：由自评水平推导默认值 ——
+   * 完全新手 → 「初试身手」（只四艺，避开难度更高的桥与倒立撑）；
+   * 练过一阵 / 有基础 → 「渐入佳境」（六艺全练）。
+   * 想换成动态调度，在训练页「调整」里切即可。
+   */
+  scheduleMode?: ScheduleMode;
+}
+
+/**
+ * 由自评水平推导默认的排期模式。
+ *
+ * 依据原书：「初试身手」是给新手的计划（原书明说「只有在这些基本动作对你而言
+ * 已是驾轻就熟之时，你才可以尝试桥和倒立撑」），而「渐入佳境」原书称
+ * 「也许是最好的基础训练计划……不管你现在多厉害，都可以（并且应该）使用」。
+ */
+export function defaultScheduleMode(level: SelfLevel): ScheduleMode {
+  return level === 'new' ? 'textbook-beginner' : 'textbook-steady';
 }
 
 /**
@@ -107,6 +128,7 @@ export function buildStoreFromOnboarding(
       sessionMinutes: answers.sessionMinutes,
       level: answers.level,
       selfReport: answers.selfReport,
+      scheduleMode: answers.scheduleMode ?? defaultScheduleMode(answers.level),
     },
   };
 
@@ -152,7 +174,7 @@ export function saveStore(store: TrainingStore): void {
  * **每加一个版本都要往这里追加**，否则老用户的数据会因为「版本不认识」
  * 被整份丢弃 —— 那等于把人练了几个月的东西一次抹掉，是不可接受的失败方式。
  */
-const KNOWN_VERSIONS: readonly number[] = [1, 2, 3];
+const KNOWN_VERSIONS: readonly number[] = [1, 2, 3, 4];
 
 /**
  * 结构迁移与补全。
@@ -164,6 +186,10 @@ const KNOWN_VERSIONS: readonly number[] = [1, 2, 3];
  * - **v1 → v2**：`DailyPlan` 新增热身 / 放松分钟数与训练量档覆盖字段。
  * - **v2 → v3**：训练量微调从 `volumeScale`（乘组数）改为 `setsDelta`（±1 组）。
  *   乘法的旧字段会被忽略，故旧版固化的今日计划直接丢弃。
+ * - **v3 → v4**：档案新增 `scheduleMode`（排期模式）。
+ *   本轮 `DailyPlan` 结构没变（新字段只加在档案上），但**仍然沿用「旧版今日计划一律丢弃」
+ *   的统一规则** —— 计划是确定性的，下次打开会立刻按同一套规则重算出等价结果，
+ *   丢弃的代价只是一次重算，却省掉了「判断哪些旧计划还能用」的分支。
  *
  * 两版的共同处理：**今天已固化的计划一律丢弃**（次日按日重算，零损失），
  * 训练历史与六艺进度**全部保留**。
@@ -186,7 +212,19 @@ export function migrate(input: Partial<TrainingStore>): TrainingStore {
 
   return {
     version: STORAGE_VERSION,
-    profile: input.profile ?? null,
+    // 老存档没有 `scheduleMode` —— 按自评水平补一个原书模板默认值。
+    // 这一条是刻意的：用户明确要「默认用原书计划」，不能让他升级完还是老样子还得自己找开关。
+    profile: input.profile
+      ? {
+          ...input.profile,
+          onboarding: {
+            ...input.profile.onboarding,
+            scheduleMode:
+              input.profile.onboarding.scheduleMode ??
+              defaultScheduleMode(input.profile.onboarding.level),
+          },
+        }
+      : null,
     skills,
     sessions: (input.sessions ?? []).slice(0, SESSION_LIMIT),
     todayPlan: input.version === STORAGE_VERSION ? input.todayPlan ?? null : null,

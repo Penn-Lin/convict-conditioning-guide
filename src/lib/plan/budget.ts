@@ -114,6 +114,17 @@ interface BuildItemContext {
   tierFloor: number;
   /** 用户手动指定的今日训练量档（未指定时为 `undefined`） */
   tierOverride?: number;
+  /**
+   * 覆盖「辅助组数上限」。
+   *
+   * 默认（`undefined`）走 `MINUTE_BUDGET[x].assistSetCap` —— 那是**自动调度模式**的语义：
+   * 辅助的定位是「补足训练类型多样性」，不该再来一遍主训的量，所以压到 1–2 组。
+   *
+   * 但**原书模板模式下六门是平级科目**（「六艺全练」里没有主辅之分），
+   * 压辅助的组数会让同一次训练里「主训 2 组、其余 1 组」这种不一致出现，
+   * 所以模板模式传 `MAX_SETS_PER_ITEM` 把它放开。
+   */
+  assistSetCap?: number;
 }
 
 /**
@@ -231,12 +242,13 @@ export function buildAssistItem(
   const tierIndex = effectiveTier(snapshot, ctx.skills, ctx.tierFloor, ctx.tierOverride);
   const tier = snapshot.ladder[Math.min(tierIndex, snapshot.ladder.length - 1)];
 
-  // 辅助仍先受「辅助组数上限」约束（15 分钟档 1 组、其余 2 组），
+  // 辅助仍先受「辅助组数上限」约束（15 分钟档 1 组、其余 2 组，模板模式可被放开），
   // 再套用用户微调 —— 微调时允许比常规上限多 1 组（用户明确要求加量）。
+  const cap = ctx.assistSetCap ?? budget.assistSetCap;
   const sets = adjustSets(
-    Math.min(tier.sets, budget.assistSetCap),
+    Math.min(tier.sets, cap),
     ctx.setsDelta,
-    budget.assistSetCap + 1,
+    cap + 1,
   );
   const { nameZh, nameEn } = nameOf(snapshot.slug, snapshot.currentStep);
 

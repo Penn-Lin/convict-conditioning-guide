@@ -21,12 +21,22 @@ import type {
   PlanItem,
   PlanOptions,
   PriorityBreakdown,
+  ScheduleMode,
   SessionMinutes,
+  SkillSnapshot,
   TrainingState,
 } from '@/types/plan';
 import { getArt } from '@/data';
 
-import { MINUTE_BUDGET, ESTIMATE, tierLabel } from './config';
+import {
+  MAX_SETS_PER_ITEM,
+  MINUTE_BUDGET,
+  ESTIMATE,
+  OVERLAP_MATRIX,
+  TEXTBOOK_TIER_CANDIDATES,
+  TIER_FIT_SLACK_MINUTES,
+  tierLabel,
+} from './config';
 import {
   buildAssistItem,
   buildMainItem,
@@ -41,6 +51,8 @@ import { primaryArtOf, rankSnapshots, scoreAll } from './priority';
 import type { AssistCandidate } from './select';
 import { scoreAssists, selectAssists } from './select';
 import { buildSnapshots } from './snapshot';
+import { isTextbookMode, resolveTemplate, textbookPlanOf } from './template';
+import type { TextbookSlug } from './config';
 import { daysLeftInWeek, makeId, weekStart } from './time';
 
 /** 引擎上下文（一次生成过程中反复用到的公共值） */
@@ -54,6 +66,18 @@ interface PlanContext {
 /** 解析生效的时间档（用户当天选择优先于档案默认值） */
 function resolveMinutes(state: TrainingState, options: PlanOptions): SessionMinutes {
   return options.availableMinutes ?? state.profile.onboarding.sessionMinutes;
+}
+
+/**
+ * 解析生效的排期模式。
+ *
+ * 优先级：当天临时指定 > 档案里的长期偏好 > `auto`。
+ *
+ * **默认 `auto` 是刻意的**：v4 之前的老存档没有这个字段，默认成模板会让
+ * 用户某天打开发现计划完全变了却不知道为什么。想用原书模板要在「调整」里主动切一次。
+ */
+export function resolveScheduleMode(state: TrainingState, options: PlanOptions): ScheduleMode {
+  return options.scheduleMode ?? state.profile.onboarding.scheduleMode ?? 'auto';
 }
 
 /**
@@ -191,6 +215,189 @@ function buildRecoveryPlan(
 }
 
 /**
+ * 原书模板模式：生成今日计划。
+ *
+ * ## 与 `auto` 模式的分工
+ * 本函数**只替换「今天练哪几门」这一层**。科目清单交给模板，主训取其中优先级最高的那门；
+ * 其余的「定档位 → 组数 → 单组次数 → 组间休息 → 时间账 → 解释」全部复用同一套实现。
+ *
+ * ## 为什么不像 auto 那样走硬门控
+ * `auto` 模式里门控是**排除**（今天练过 / 太累 / 停滞 → 这一门不排）。
+ * 模板模式下科目是固定的，排除任何一门都会让「六艺全练」缺一角，那就不是原书的计划了。
+ * 所以这里把门控**降级**为两条更温和的表达：
+ * - 「距上次训练不足 `TEXTBOOK_REST_DAYS` 天」→ 该门今天不排（`resolveTemplate` 负责）；
+ * - 上次完成度崩过（`softDowngrade`）→ 由 `effectiveTier` 自动再降一档。
+ *
+ * ## 档位怎么定
+ * 从 `TEXTBOOK_TIER_CANDIDATES`（中级档 → 初级档）**逐档下试**，
+ * 取第一个「热身 + 训练 + 放松」装得进时间档（含 `TIER_FIT_SLACK_MINUTES` 容差）的档位。
+ * 原书的日常训练量就是「通常建议练习两组」，所以中级档是首选；时间不够才退到 1 组。
+ */
+function buildTextbookDailyPlan(input: {
+  ctx: PlanContext;
+  state: TrainingState;
+  mode: TextbookSlug;
+  snapshots: SkillSnapshot[];
+  scores: Record<ArtSlug, PriorityBreakdown>;
+  ranked: SkillSnapshot[];
+}): DailyPlan {
+  const { ctx, state, mode, snapshots, scores, ranked } = input;
+  const options = ctx.options;
+  const planDef = textbookPlanOf(mode)!;
+
+  const selection = resolveTemplate(mode, snapshots, options.excludeSkills ?? []);
+
+  // 科目按优先级排序：主训 = 今天科目里优先级最高的那门（「体力最好时做最难的」）
+  const selected = ranked.filter((snapshot) => selection.arts.includes(snapshot.slug));
+  const mainSnapshot = selected[0];
+
+  // 兜底：科目全被排除（理论上不会，模板是固定清单）→ 走恢复日，绝不返回空白页
+  if (!mainSnapshot) {
+    return buildRecoveryPlan(
+      ctx,
+      [],
+      scores,
+      {
+        base: selection.arts.length,
+        weekBonus: 0,
+        fatigueReduce: 0,
+        total: selection.arts.length,
+        avgFatigue: 0,
+        weekNote: null,
+      },
+      [],
+    );
+  }
+
+  // 其余科目按优先级降序当「辅助」。这里不用 `selectAssists` 的硬约束：
+  // 原书的六艺清单本身就是设计好的组合，不该被「负荷重叠」二次筛掉。
+  const assistCandidates: AssistCandidate[] = selected.slice(1).map((snapshot) => ({
+    snapshot,
+    value: scores[snapshot.slug].total,
+    parts: { score: 0, complement: 0, freshness: 0 },
+    overlapWithMain: OVERLAP_MATRIX[mainSnapshot.slug][snapshot.slug],
+  }));
+
+  /** 按给定档位下限组装全部计划项 */
+  const trial = (tierFloor: number) => {
+    const buildCtx = {
+      minutes: ctx.minutes,
+      setsDelta: options.setsDelta ?? 0,
+      skills: state.skills,
+      tierFloor,
+      tierOverride: options.volumeTierOverride,
+      // 模板模式下六门是平级科目，不受「辅助组数上限」压制（见 BuildItemContext 注释）
+      assistSetCap: MAX_SETS_PER_ITEM,
+    };
+    const main = buildMainItem(mainSnapshot, mainReason(mainSnapshot), buildCtx);
+    const assists = assistCandidates.map((candidate) =>
+      buildAssistItem(
+        candidate,
+        assistReason(candidate, mainSnapshot.slug, mainSnapshot.currentStep),
+        buildCtx,
+      ),
+    );
+    return { main, assists, total: sumMinutes([main, ...assists]) };
+  };
+
+  // 逐档下试：取第一个装得进时间档（含容差）的档位；都装不下则用最低档。
+  // 兜底路径（昨天刚练过）**只允许最低档** —— 文案承诺了「统一降到初级档」，代码必须真的做到。
+  const candidates = selection.allResting
+    ? [TEXTBOOK_TIER_CANDIDATES[TEXTBOOK_TIER_CANDIDATES.length - 1]]
+    : TEXTBOOK_TIER_CANDIDATES;
+  const budget = ctx.minutes + TIER_FIT_SLACK_MINUTES;
+  let chosenFloor = candidates[candidates.length - 1];
+  let built = trial(chosenFloor);
+  for (const floor of candidates) {
+    const attempt = trial(floor);
+    const elapsed = ESTIMATE.warmupMinutes + attempt.total + ESTIMATE.cooldownMinutes;
+    if (elapsed <= budget) {
+      chosenFloor = floor;
+      built = attempt;
+      break;
+    }
+  }
+
+  const items: PlanItem[] = [built.main, ...built.assists];
+  const totalEstimatedMinutes = built.total;
+  const { warmupMinutes, cooldownMinutes, freeMinutes } = timeLedger(
+    ctx.minutes,
+    totalEstimatedMinutes,
+  );
+
+  // 未排进今天、也不是「休息中」的科目（初试身手不含桥与倒立撑，那两门会落在这里）
+  const outsideTemplate = ranked.filter((snapshot) => !selection.arts.includes(snapshot.slug));
+
+  const countDecision = {
+    base: selection.arts.length,
+    weekBonus: 0,
+    fatigueReduce: 0,
+    total: items.length,
+    avgFatigue:
+      snapshots.reduce((sum, snapshot) => sum + snapshot.fatigueNow, 0) /
+      Math.max(1, snapshots.length),
+    weekNote: null,
+  };
+
+  const reasons = buildReasons({
+    main: { snapshot: mainSnapshot, item: built.main },
+    assists: assistCandidates.map((candidate, index) => ({
+      candidate,
+      item: built.assists[index],
+    })),
+    unselected: outsideTemplate,
+    scores,
+    excluded: [],
+    options,
+    minutes: ctx.minutes,
+    totalEstimatedMinutes,
+    countDecision,
+    returned: [],
+    kind: 'training',
+    tierNote: null,
+    schedule: {
+      mode,
+      name: planDef.name,
+      tagline: planDef.tagline,
+      daysPerWeek: planDef.daysPerWeek,
+      source: planDef.source,
+      tier: chosenFloor,
+      resting: selection.resting.map((slug) => getArt(slug)?.nameZh ?? slug),
+      allResting: selection.allResting,
+    },
+  });
+
+  const ledger = { warmupMinutes, cooldownMinutes, freeMinutes };
+
+  return {
+    id: makeId('plan', ctx.today, ctx.revision),
+    date: ctx.today,
+    generatedAt: `${ctx.today}T12:00:00`,
+    revision: ctx.revision,
+    availableMinutes: ctx.minutes,
+    kind: 'training',
+    main: built.main,
+    assists: built.assists,
+    optional: [], // 模板模式不提供加练自选：科目已由原书清单定满
+    totalEstimatedMinutes,
+    ...ledger,
+    summary: buildSummary(
+      'training',
+      built.main,
+      built.assists,
+      totalEstimatedMinutes,
+      ctx.minutes,
+      ledger,
+    ),
+    tips: buildTips(items, ctx.minutes, totalEstimatedMinutes, ledger),
+    reasons,
+    excluded: [],
+    scores,
+    appliedOptions: { ...options, today: ctx.today },
+  };
+}
+
+/**
  * 生成今日训练计划。
  *
  * @param state   当前训练状态（由 hooks 组装）
@@ -212,6 +419,25 @@ export function generateDailyPlan(
 
   // ① 派生计算态
   const snapshots = buildSnapshots({ ...state, today });
+
+  // ② 排期模式分叉 —— **本版唯一的分叉点**，只决定「今天练哪几门」
+  const mode = resolveScheduleMode(state, options);
+  if (isTextbookMode(mode)) {
+    const primaryArt = primaryArtOf(snapshots);
+    const textbookScores = scoreAll(snapshots, primaryArt);
+    const textbookRanked = rankSnapshots(snapshots, textbookScores);
+    textbookRanked.forEach((snapshot, index) => {
+      textbookScores[snapshot.slug].rank = index + 1;
+    });
+    return buildTextbookDailyPlan({
+      ctx,
+      state,
+      mode,
+      snapshots,
+      scores: textbookScores,
+      ranked: textbookRanked,
+    });
+  }
 
   // ② 周计划缺口（只作用于项数，不参与打分 —— 见 config.WEEK_PLAN 决策记录）
   const weekResult = computeWeekBonus({
