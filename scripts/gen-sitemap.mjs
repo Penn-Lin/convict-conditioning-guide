@@ -1,5 +1,6 @@
 /**
- * gen-sitemap.mjs —— 构建后生成 `dist/sitemap.xml`（架构 §2.8 / §7 T11 · PRD P0-15）。
+ * gen-sitemap.mjs —— 构建后生成 `dist/sitemap.xml` 与 `dist/robots.txt`
+ * （架构 §2.8 / §7 T11 · PRD P0-15）。
  *
  * 设计要点：
  * 1. **数据派生、不硬编码**：本脚本从 `src/data` 的**源文件**读取真源，而不是把 60 条
@@ -12,8 +13,10 @@
  * 2. **零依赖**：仅用 Node 内置 `node:fs` / `node:path` / `node:url`，手写 XML 字符串拼接，
  *    **不引入任何 sitemap 库**（架构 §8 依赖极简原则）。
  *
- * 3. **不依赖环境变量**：站点基准 URL 由下方 `SITE_URL` 常量提供（**部署时替换为真实域名**）；
- *    脚本在没有任何 `env` 的情况下也能正常跑（构建脚本必须如此）。
+ * 3. **零环境变量也能跑**：站点基准 URL 默认取下面的 `DEFAULT_SITE_URL` 常量；
+ *    可以用环境变量 `SITE_URL` 覆盖（Cloudflare 的项目设置里配一个即可）。
+ *    这样做是为了让**同一份代码同时部署到 Workers 与 Pages 时，sitemap / robots
+ *    能各自指向自己那个域名** —— 换托管平台或绑自定义域名都不必改代码。
  *
  * 4. **容错**：`dist/` 不存在时自动创建；单个数据文件解析不到 `stepNo` 时跳过其式页而非报错
  *    （内容层占位阶段亦能生成合法 sitemap）。
@@ -23,12 +26,17 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 /* ---------------------------------------------------------------------------
- * 站点基准 URL —— 部署时替换为真实域名（此处为占位值，与 public/robots.txt 保持一致）
+ * 站点基准 URL
+ *
+ * 默认值是 Cloudflare **Workers**（静态资源）的地址，格式为
+ * `<Worker名>.<账户子域>.workers.dev`；Pages 是 `<项目名>.pages.dev`，两者不通用。
  * ------------------------------------------------------------------------ */
-// 站点实际部署地址。更换自定义域名时只改这一行即可。
-// 注意：部署在 Cloudflare **Workers**（静态资源），地址格式为 <Worker名>.<账户子域>.workers.dev，
-// 不是 Pages 的 <项目名>.pages.dev。
-const SITE_URL = 'https://convict-conditioning-guide.adasoigivea.workers.dev';
+
+/** 默认站点地址（没有 `SITE_URL` 环境变量时用它） */
+const DEFAULT_SITE_URL = 'https://convict-conditioning-guide.adasoigivea.workers.dev';
+
+/** 实际生效的站点地址：环境变量优先，并去掉结尾多余的斜杠 */
+const SITE_URL = (process.env.SITE_URL || DEFAULT_SITE_URL).replace(/\/+$/, '');
 
 /** 项目根目录（本脚本位于 `<root>/scripts/`，故上溯一层） */
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -41,6 +49,9 @@ const ARTS_DIR = join(DATA_DIR, 'arts');
 
 /** sitemap 输出路径（`dist/sitemap.xml`） */
 const OUTPUT_FILE = join(PROJECT_ROOT, 'dist', 'sitemap.xml');
+
+/** robots.txt 输出路径（`dist/robots.txt`） */
+const ROBOTS_FILE = join(PROJECT_ROOT, 'dist', 'robots.txt');
 
 /** 路由表既有静态页（架构 §4.1）：路径 → { changefreq, priority } */
 const STATIC_PAGES = [
@@ -200,6 +211,11 @@ function renderSitemap(entries) {
   ].join('\n');
 }
 
+/** 渲染 robots.txt 文本（Sitemap 链接必须与站点基准 URL 同源） */
+function renderRobots() {
+  return ['User-agent: *', 'Allow: /', '', `Sitemap: ${SITE_URL}/sitemap.xml`, ''].join('\n');
+}
+
 /** 主流程 */
 function main() {
   const entries = buildEntries();
@@ -211,6 +227,11 @@ function main() {
 
   writeFileSync(OUTPUT_FILE, renderSitemap(entries), 'utf8');
 
+  // robots.txt 也在构建期生成，而不是放 `public/` 里写死 ——
+  // 否则换域名（Workers ↔ Pages ↔ 自有域名）时 sitemap.xml 改了、robots 里的 Sitemap 行没改，
+  // 两个文件指向不同域名，属于只在抓取日志里才看得见的静默不一致。
+  writeFileSync(ROBOTS_FILE, renderRobots(), 'utf8');
+
   const artCount = readArtsMeta().length;
   const moveCount = entries.filter((entry) => /\/arts\/[^/]+\/\d+$/.test(entry.loc)).length;
 
@@ -218,7 +239,7 @@ function main() {
   console.log(`[gen-sitemap] 艺页      : ${artCount}`);
   console.log(`[gen-sitemap] 式页      : ${moveCount}`);
   console.log(`[gen-sitemap] 总条目    : ${entries.length}`);
-  console.log(`[gen-sitemap] 已写入    : ${OUTPUT_FILE}`);
+  console.log(`[gen-sitemap] 已写入    : dist/sitemap.xml + dist/robots.txt`);
 }
 
 main();

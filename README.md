@@ -130,13 +130,59 @@ Service Worker 的缓存策略：
 
 ## 部署
 
-推送 `main` 后由 Cloudflare 侧触发构建（仓库内**没有** GitHub Actions）。
+仓库内**没有** GitHub Actions，推送 `main` 后由 Cloudflare 侧触发构建。
+同一份代码**可以同时部署到 Workers 与 Pages**，互不干扰（见下）。
+
+### 通用：站点地址是构建期变量
+
+`sitemap.xml` 与 `robots.txt` 都由 `scripts/gen-sitemap.mjs` 在构建期生成，
+基准地址取环境变量 `SITE_URL`，没有则回落到脚本里的 `DEFAULT_SITE_URL`。
+
+在 Cloudflare 项目设置的 **环境变量** 里加一条 `SITE_URL`（如
+`https://xxx.pages.dev`）即可，**不用改代码**。这样两个部署各自的 sitemap
+指向自己的域名，不会串。
+
+> 这两个文件刻意不在 `public/` 里写死 —— 否则换域名时 sitemap 改了、robots 没改，
+> 两个文件指向不同域名，属于只在抓取日志里才看得见的静默不一致。
+
+### 选项 A：Cloudflare Workers（当前线上）
 
 - `wrangler.jsonc` 显式声明这是纯静态资源站点，因此不会触发 Cloudflare 的
   「框架自动配置」（那个流程要求 Vite ≥ 6，本项目刻意停在 5.4）。
 - 深层路由（如 `/arts/pushups/5`）刷新不 404，依赖 `wrangler.jsonc` 里的
-  `not_found_handling: "single-page-app"`。**不要**再往 `public/` 放 `_redirects`，
-  Workers 静态资源校验器会判它死循环并让构建失败。
+  `not_found_handling: "single-page-application"`。
+- ⚠️ **不要**往 `public/` 放 `_redirects`：Workers 静态资源校验器会判它死循环并让构建失败。
+
+### 选项 B：Cloudflare Pages
+
+在 Dashboard →「Workers 和 Pages」→ 创建 → **Pages** → 连接 Git → 选本仓库：
+
+| 设置项 | 值 |
+|---|---|
+| 构建命令 | `npm run build` |
+| 输出目录 | `dist` |
+| 环境变量 | `SITE_URL` = 该项目的 `https://<项目名>.pages.dev`（可选） |
+
+**零代码改动**：Pages 只要输出目录里**没有顶层 `404.html`**，就自动把 `index.html`
+兜底给所有未匹配路径 —— 也就是自动识别为 SPA。**不需要 `_redirects`**，
+那个老写法现在反而会被 Cloudflare 判成重定向死循环。
+
+Cloudflare 目前更主推 Workers，但 Pages 仍在正常接受新项目，静态站点够用。
+
+### 关于国内访问（重要）
+
+`*.workers.dev` 与 `*.pages.dev` **都在 DNS 污染名单上**，区别只是命中率：
+
+| 域名 | 国内实测 |
+|---|---|
+| `*.workers.dev` | 自 2022-05 起被连续屏蔽 —— 基本必须走代理 |
+| `*.pages.dev` | 同为污染目标，但部分运营商 / 时段能通，属「不稳定」而非「完全不可用」 |
+
+两者都是**免费二级域名、没有 ICP 备案**，所以拿不到大陆节点，只能走海外节点 ——
+这是「不稳定」的根本原因，换平台治不了本。
+
+**真正的解法是绑自有域名**（Workers 与 Pages 都支持），绕开平台域名层。
+要面向国内用户长期稳定访问，只有「自有域名 + 备案 + 国内 CDN」这一条路。
 
 ---
 
