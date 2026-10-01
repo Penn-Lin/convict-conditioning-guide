@@ -30,10 +30,12 @@ import {
   SlidersHorizontal,
   TrendingUp,
 } from 'lucide-react';
+import type { ArtSlug } from '@/types';
 import type { ProgressionVerdict, ScheduleMode } from '@/types/plan';
 import { ART_ORDER, MOVES_PER_ART, SITE_NAME } from '@/lib/constants';
+import { getArt } from '@/data';
 import { formatDateCn, weekStart } from '@/lib/plan/time';
-import { textbookPlanOf } from '@/lib/plan/template';
+import { TEXTBOOK_PLANS, textbookPlanOf } from '@/lib/plan/template';
 import { useDocumentMeta } from '@/lib/seo';
 import { useTraining } from '@/hooks/TrainingProvider';
 
@@ -101,6 +103,19 @@ export function Plan() {
   const items = [plan.main, ...plan.assists].filter(
     (item): item is NonNullable<typeof item> => item !== null,
   );
+
+  /*
+   * 原书模板未包含的艺。
+   *
+   * 「初试身手」原书就是只练四艺（见 `TEXTBOOK_PLANS`），但用户打开训练页只会看到
+   * 四项，既不知道为什么，也不知道另一套计划里是六项 —— 这个信息原先只存在于
+   * 「调整」抽屉里，等于藏起来了。这里在计划页直接说清。
+   */
+  const missingFromTemplate: ArtSlug[] = textbook
+    ? ART_ORDER.filter((slug) => !textbook.arts.includes(slug))
+    : [];
+  const artNames = (slugs: readonly ArtSlug[]) =>
+    slugs.map((slug) => getArt(slug)?.nameZh ?? slug).join('、');
 
   /* ---- 时间账（热身 + 训练 + 放松）---- */
   const sessionMinutes =
@@ -228,6 +243,24 @@ export function Plan() {
               你的时间档是 {plan.availableMinutes} 分钟。热身按原书做法用低难度版本做两组，
               约 3 分钟即可，不必更长。
             </p>
+
+            {/*
+              科目数由原书模板决定，不由时间档决定 —— 用户最容易误解的一点。
+              「初试身手」原书只含四艺，缺的那两门要在这里点明，否则用户无从得知。
+            */}
+            {textbook && missingFromTemplate.length > 0 ? (
+              <div className="mt-3 rounded-md border border-violet/30 bg-violet-soft px-3 py-2.5">
+                <p className="flex items-start gap-1.5 text-xs leading-relaxed text-text">
+                  <Info aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet" />
+                  <span>
+                    科目由训练安排方式决定，不由时间档决定。原书「{textbook.name}」只含{artNames(textbook.arts)}四艺，
+                    {artNames(missingFromTemplate)}不在此列 —— 原书说「只有在这些基本动作对你而言
+                    已是驾轻就熟之时，你才可以尝试桥和倒立撑」。想现在就把六艺排进来，点右上角
+                    「调整」切到「{TEXTBOOK_PLANS['textbook-steady'].name}」。
+                  </span>
+                </p>
+              </div>
+            ) : null}
 
             <ul className="m-0 mt-3.5 flex list-none flex-col gap-3 p-0">
               {items.map((item, index) => (

@@ -1078,10 +1078,28 @@ describe('highlight · 富文本高亮引擎', () => {
     expect(highlight(text).map((token) => token.text).join('')).toBe(text);
   });
 
+  /**
+   * 「常见错误」的守卫。
+   *
+   * 该字段原书没有对应小节，内容是在原书要求之上的推导（见 `Move.commonMistakes`）。
+   * 类型上必填只能保证字段存在，挡不住「填个空数组」——那会在页面上静默少一块板块。
+   * 另外统一要求「表现 —— 纠正」的两段格式，缺了破折号说明写成了一句话，不符合本站写法。
+   */
+  it('60 式都写满了常见错误', async () => {
+    const { allMoves } = await import('@/data');
+    expect(allMoves).toHaveLength(60);
+    for (const move of allMoves) {
+      expect(move.commonMistakes.length).toBeGreaterThanOrEqual(2);
+      for (const item of move.commonMistakes) {
+        expect(item).toContain('——');
+      }
+    }
+  });
+
   it('站内 60 式正文解析后逐字无损', async () => {
     const { allMoves } = await import('@/data');
     for (const move of allMoves) {
-      for (const field of [move.description, ...move.steps, ...move.keyPoints, ...(move.commonMistakes ?? [])]) {
+      for (const field of [move.description, ...move.steps, ...move.keyPoints, ...move.commonMistakes]) {
         expect(highlight(field).map((token) => token.text).join('')).toBe(field);
       }
     }

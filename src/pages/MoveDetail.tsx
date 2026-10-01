@@ -455,9 +455,10 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
           <InfoList appearance="plain" variant="success" items={move.keyPoints} />
         </CollapsibleSection>
 
-        {/* 常见错误：原书没有这一节，只有部分式子点明了错误做法（见 Move.commonMistakes
-            的注释）。没有依据就整个板块不渲染，宁可少一块也不编。 */}
-        {move.commonMistakes && move.commonMistakes.length > 0 ? (
+        {/* 常见错误：内容是在原书要求之上的推导（见 Move.commonMistakes 注释），
+            每一条都能反推到该式原书里的某条具体要求。类型上必填，这里仍判一次长度 ——
+            万一数据退化成空数组，宁可少一块板块，也不渲染一个空标题。 */}
+        {move.commonMistakes.length > 0 ? (
           <CollapsibleSection
             id="mistakes"
             field="commonMistakes"
