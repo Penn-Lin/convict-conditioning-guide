@@ -266,3 +266,43 @@ dialog.sheet[open] {
 body.sheet-open {
   overflow: hidden;
 }
+
+/* ===========================================================================
+   大图查看（原生 <dialog> · v3）
+   —— 与 dialog.sheet 同一套选型理由（见上）：焦点陷阱 / Esc / ::backdrop 免费。
+   —— 用「铺满视口的深色底」而不是白卡：教学图本身是浅底照片，压在深底上
+      边界最清楚，也不会和页面的浅色卡片混淆。
+   —— 同样刻意不加 `@layer`，理由与 dialog.sheet 一致。
+   =========================================================================== */
+dialog.lightbox {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  padding: 0;
+  border: none;
+  /* 自身透明：视觉上的深色由 ::backdrop 提供，点击自身即视为点遮罩 */
+  background-color: transparent;
+  color: rgb(var(--text));
+  overflow: hidden;
+}
+
+dialog.lightbox::backdrop {
+  background-color: rgb(0 0 0 / 0.84);
+}
+
+dialog.lightbox[open] {
+  animation: lightbox-in 0.18s ease-out;
+}
+
+@keyframes lightbox-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
