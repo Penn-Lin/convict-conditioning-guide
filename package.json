@@ -10,8 +10,10 @@
     "test:watch": "vitest",
     "check:lock": "node scripts/check-lock.mjs",
     "check:figures": "node scripts/check-figures.mjs",
-    "build": "node scripts/check-lock.mjs && node scripts/check-figures.mjs && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && node scripts/gen-sitemap.mjs",
+    "build": "node scripts/check-lock.mjs && node scripts/check-figures.mjs && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && node scripts/gen-sitemap.mjs && node scripts/gen-sw.mjs",
     "build:sitemap": "node scripts/gen-sitemap.mjs",
+    "build:sw": "node scripts/gen-sw.mjs",
+    "gen:icons": "\"C:/Users/Zupeng Lin/.workbuddy/binaries/python/envs/default/Scripts/python.exe\" scripts/gen-icons.py",
     "preview": "vite preview"
   },
   "dependencies": {

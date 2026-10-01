@@ -13,6 +13,7 @@
 import { Link } from 'react-router-dom';
 import { TriangleAlert, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { InstallCard } from '@/components/ui/InstallCard';
 import { SectionCard } from '@/components/ui/SectionCard';
 import { SITE_NAME } from '@/lib/constants';
 import { useDocumentMeta } from '@/lib/seo';
@@ -72,6 +73,9 @@ export function About() {
             </p>
           </div>
         </SectionCard>
+
+        {/* ①.5 安装为应用（PWA）—— 就在「这是什么」之后，属于「怎么用」的实操信息 */}
+        <InstallCard />
 
         {/* ② 内容来源标注 */}
         <SectionCard id="about-source" title="内容来源与致谢">

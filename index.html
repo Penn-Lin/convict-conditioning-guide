@@ -3,7 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      PWA 接线。
+      - 图标 URL 一律带 `?v=`：图标这类文件**必须换 URL 才能可靠刷新**，
+        只替换文件内容时，浏览器 HTTP 缓存 / SW 预缓存 / 系统 launcher 任何一层
+        都可能继续用旧图。每次改图标都要把这里和 manifest.json 的 `?v=` 一起 +1。
+      - 同时保留原来的 SVG favicon（矢量，标签页最清晰）；PNG 32 与 ICO 是小尺寸兜底。
+      - `theme_color` 与 manifest 的 theme_color 保持一致。
+    -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png?v=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=1" />
+    <link rel="shortcut icon" href="/icons/favicon.ico?v=1" />
+    <meta name="theme-color" content="#C2410C" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="囚徒健身" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
     <title>囚徒健身 · 六艺十式动作指导站</title>
     <meta
       name="description"
