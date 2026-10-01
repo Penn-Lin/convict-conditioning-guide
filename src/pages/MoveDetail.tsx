@@ -455,16 +455,20 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
           <InfoList appearance="plain" variant="success" items={move.keyPoints} />
         </CollapsibleSection>
 
-        <CollapsibleSection
-          id="mistakes"
-          field="commonMistakes"
-          title="常见错误"
-          tone="risk"
-          icon={TriangleAlert}
-          defaultOpen
-        >
-          <MistakeList items={move.commonMistakes} />
-        </CollapsibleSection>
+        {/* 常见错误：原书没有这一节，只有部分式子点明了错误做法（见 Move.commonMistakes
+            的注释）。没有依据就整个板块不渲染，宁可少一块也不编。 */}
+        {move.commonMistakes && move.commonMistakes.length > 0 ? (
+          <CollapsibleSection
+            id="mistakes"
+            field="commonMistakes"
+            title="常见错误"
+            tone="risk"
+            icon={TriangleAlert}
+            defaultOpen
+          >
+            <MistakeList items={move.commonMistakes} />
+          </CollapsibleSection>
+        ) : null}
 
         <CollapsibleSection
           id="progression"

@@ -1081,7 +1081,7 @@ describe('highlight · 富文本高亮引擎', () => {
   it('站内 60 式正文解析后逐字无损', async () => {
     const { allMoves } = await import('@/data');
     for (const move of allMoves) {
-      for (const field of [move.description, ...move.steps, ...move.keyPoints, ...move.commonMistakes]) {
+      for (const field of [move.description, ...move.steps, ...move.keyPoints, ...(move.commonMistakes ?? [])]) {
         expect(highlight(field).map((token) => token.text).join('')).toBe(field);
       }
     }
