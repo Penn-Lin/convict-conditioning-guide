@@ -87,7 +87,7 @@ export function UiShowcase() {
             传入 <code>src</code> 时渲染真实图片（示例用站点图标）：
           </p>
           <div className="w-24">
-            <FigureSlot ratio="1/1" label="真实图片示例" src="/favicon.svg" />
+            <FigureSlot ratio="1/1" label="真实图片示例" src="/icons/icon-192.png" />
           </div>
         </Block>
 

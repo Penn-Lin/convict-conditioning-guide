@@ -225,7 +225,7 @@ react / react-dom / react-router-dom / lucide-react 四项。
 │  data/index.ts (聚合 + prev/next 派生)                     │
 │  data/artsMeta.ts (艺元数据)  ·  types/index.ts (类型契约)  │
 ├──────────────────────────────────────────────────────────┤
-│  静态资源层  public/（图标 favicon.svg + _redirects + robots）│
+│  静态资源层  public/（icons/ 图标全套 + manifest.json + actions/）│
 │  ⚠ v1.3：无 public/images/（首版不放图片；补图阶段再建，§5.5）│
 └──────────────────────────────────────────────────────────┘
    单向依赖：Pages → Components → Data → Types
@@ -253,9 +253,16 @@ react / react-dom / react-router-dom / lucide-react 四项。
 | 6 | `postcss.config.js` | Tailwind + autoprefixer |
 | 7 | `index.html` | HTML 模板（`lang`/title/description/favicon/OG）+ **主题初始化内联脚本（防首屏闪烁）** |
 | 8 | `.gitignore` | 忽略 node_modules/dist |
-| 9 | `public/_redirects` | **Cloudflare Pages SPA 回退（关键）** |
-| 10 | `public/favicon.svg` | 站点图标（单色，浅 / 深主题均适配） |
-| 11 | `public/robots.txt` | 爬虫规则 + sitemap 指向 |
+| 9 | `public/manifest.json` | PWA 清单（名称 / 图标 / `display: standalone`） |
+| 10 | `public/icons/*` | PWA 图标全套（`scripts/gen-icons.py` 从 `icon-design/` 的设计稿生成） |
+| 11 | `public/actions/{slug}/*` | 六艺动作图（6 艺 × 10 式 × 2 张 = 120 张） |
+
+> **现状注记（2026-10-01，本表已按当前仓库更新）**：
+> `public/_redirects` 与 `public/robots.txt` 均已不在仓库内 —— 前者弃用
+> （Pages 的 SPA 兜底是自动的，写 `_redirects` 反而被判死循环），后者改由
+> `scripts/gen-sitemap.mjs` 构建期生成。`public/favicon.svg` 亦已移除：
+> 现行图标是做旧风的位图插画，无法用矢量表达，标签页图标改走 PNG / ICO。
+> 托管也由 Workers 迁到了 **Pages**。
 
 ### 2.2 入口与路由（4 个文件）
 

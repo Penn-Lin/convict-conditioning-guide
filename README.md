@@ -39,8 +39,7 @@ PWA 也没有引入 `vite-plugin-pwa`／Workbox，而是自行生成 Service Wor
 ├── public/                 # 原样拷贝进 dist/
 │   ├── actions/            # 六艺动作图 6 × 10 式 × 2 张 = 120 张
 │   ├── icons/              # PWA 图标全套（any / maskable / apple-touch / favicon）
-│   ├── manifest.json       # PWA 清单
-│   └── favicon.svg         # 标签页图标（矢量，与 PWA 图标同一套「囚」标记）
+│   └── manifest.json       # PWA 清单
 │
 ├── scripts/                # 构建期脚本（零依赖）
 │   ├── check-lock.mjs      # 守卫：package.json 与 lock 文件是否一致
@@ -64,7 +63,7 @@ PWA 也没有引入 `vite-plugin-pwa`／Workbox，而是自行生成 Service Wor
 │   └── pages/              # 8 个页面
 │
 ├── docs/                   # 设计与核对文档（见下方索引）
-├── icon-design/            # PWA 图标的源图（由 gen-icons.py 绘制，改图标后一起提交）
+├── icon-design/            # PWA 图标的设计稿（唯一真源，改图标先换这里的图）
 ├── books/                  # 原书 PDF / MOBI，仅本地核对用，已 gitignore
 └── .book_extract/          # 原书解包与抽图工作区，已 gitignore
 ```
@@ -107,10 +106,14 @@ check-lock → check-figures → tsc(--noEmit ×2) → vite build
 |---|---|
 | `public/manifest.json` | 应用清单：名称、图标、`display: standalone`、主题色 |
 | `public/icons/*` | 图标全套：`any` 圆角版、`maskable` 安全区版、`apple-touch`、`favicon` |
-| `public/favicon.svg` | 标签页图标（矢量，与 PNG 图标共用同一套「囚」标记的几何） |
+| `icon-design/source-app-icon.png` | 图标设计稿（**唯一真源**，`scripts/gen-icons.py` 的输入） |
 | `dist/sw.js` | 构建期由 `scripts/gen-sw.mjs` 生成，**不进仓库** |
 
-标记符号就是站名本身 —— **「囚」**（`囗` + `人`），底色用全站唯一的「行动」色相 accent 橙。
+图标设计：做旧纸质奶油底 + 五根铁栏 + 左侧计数记号（4 竖 1 斜 ＝ 5）+ 俯卧撑剪影。
+语义是「铁栏＝囚、记号＝组数、剪影＝自重训练」。
+
+> 没有 `favicon.svg`：这是一张位图插画，矢量表达不了，所以标签页图标也走 PNG / ICO。
+> 普通色块 logo 才值得配一份矢量版以防标签页缩放发虚。
 
 Service Worker 的缓存策略：
 
@@ -124,20 +127,21 @@ Service Worker 的缓存策略：
 
 图标文件**必须换 URL 才能可靠刷新**（浏览器缓存、SW 预缓存、系统 launcher 各有一层）。
 
-1. 改 `scripts/gen-icons.py` 里的设计参数，重跑 `npm run gen:icons`
+1. 换掉 `icon-design/source-app-icon.png`（或调 `scripts/gen-icons.py` 里的参数），跑 `npm run gen:icons`
 2. `public/manifest.json` 与 `index.html` 里图标的 `?v=` 全部 +1
-   （**`favicon.svg` 也要带** —— 它换了内容但路径不变，不带参数就一直在吃缓存）
 3. 重新构建（`gen-sw.mjs` 会自动带上新的哈希，无需手改版本号）
 4. 已安装过的应用要**卸载重装**才会换图标
 
-`gen-icons.py` 里三条容易重犯的坑（都写在文件注释里）：
+`gen-icons.py` 里几条容易重犯的坑（都写在文件注释里）：
 
-- **maskable 版必须是「整体重绘」**（底色满幅、只把标记缩到 78% 安全区），
-  不是「把 any 版缩小了垫在底板上」—— 后者会出现「方中带方」的硬边；
-- **标记必须画在独立图层上再 `alpha_composite` 到底图**。直接
-  `ImageDraw.Draw(img, 'RGBA')` 往不透明底上画会连底图 alpha 一起拉低，
-  图看着完全正常，只有「满幅不透明」断言会炸；
-- **32px 走特化参数**（加粗 + 略放大），否则细笔画抗锯齿后糊成灰边。
+- **设计稿多半不是「满幅方块」**，要按亮度阈值自动裁边、再往里收一点甩掉压缩杂边；
+- **设计稿自己圆角之外那圈要补掉**（原图是黑底）。补的是**外圈**中位色，不是整图中位色 ——
+  做旧风普遍带暗角，用整图中位色平铺会露出内外两个色块；
+- **maskable 的缩放比要按「最远墨迹像素」实算**，不能按内容外接框的四角算 ——
+  外接框的角常常是空的，按角算会把图标缩得过小（实测差 0.60 → 0.71）；
+- **求内容范围前先降采样**（`Image.BOX` 到 128px）。纸纹噪点会让 `getbbox()` 直接返回整张图；
+- **存储时量化到 128 色调色板**：纸纹是高频噪声，真彩 PNG 要 400 KB，量化后 87 KB，
+  平均通道偏差 1.6/255（图标进 SW 预缓存，体积直接等于安装下载量）。
 
 ---
 
@@ -224,8 +228,8 @@ npx wrangler pages project list    # 输出里会列出每个项目挂着的域�
 6. **深色主题下不要用 `text-white` 配亮色底**，统一用 `text-bg`。
 7. **递增 `STORAGE_VERSION` 必须同步追加 `storage.KNOWN_VERSIONS`**，
    否则所有老存档会被判为「版本不认识」而清空。
-8. **换图标必须换 URL**（`?v=` 同时 +1，且 `favicon.svg` 也要带参数）——
-   只替换文件内容时，浏览器缓存 / SW 预缓存 / 系统 launcher 任何一层都可能继续用旧图。
+8. **换图标必须换 URL**（`?v=` 同时 +1）。只替换文件内容、URL 不变时，浏览器缓存 /
+   SW 预缓存 / 系统 launcher 任何一层都可能继续用旧图。
 9. 本机 `npm install` 若报 EPERM / EBUSY，加 `--cache ./.npm-cache`；
    esbuild 的 postinstall 版本自检报错不影响使用。
 
