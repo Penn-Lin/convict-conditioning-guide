@@ -115,39 +115,49 @@ export function Sheet({
         onClose();
       }}
     >
-      <div className="flex max-h-[90dvh] flex-col lg:max-h-[84dvh]">
-        {/* 抓手条：暗示「可下拉/可关闭」 */}
-        <div className="flex justify-center pt-2.5 lg:hidden">
-          <span aria-hidden="true" className="h-1 w-10 rounded-pill bg-border-strong" />
+      <div className="flex flex-col">
+        {/*
+          页头（抓手条 + 标题 + 关闭）整块贴顶。
+          滚动容器是 dialog 自身（见 index.css 的 `dialog.sheet`），
+          所以这里靠 `sticky` 定位，而不是「让 flex-1 去撑」——
+          没有任何需要浏览器计算的高度，也就没有算错的可能。
+        */}
+        <div className="sticky top-0 z-10 bg-surface">
+          {/* 抓手条：暗示「可下拉/可关闭」 */}
+          <div className="flex justify-center pt-2.5 lg:hidden">
+            <span aria-hidden="true" className="h-1 w-10 rounded-pill bg-border-strong" />
+          </div>
+
+          <header className="flex items-start gap-3 border-b border-border px-5 pb-3 pt-3">
+            <span aria-hidden="true" className={['mt-0.5 h-1.5 w-1.5 shrink-0 rounded-pill', style.bar].join(' ')} />
+            <div className="min-w-0 flex-1">
+              <h2
+                id={headingId}
+                className="text-lg font-extrabold leading-tight tracking-tight text-text"
+              >
+                {title}
+              </h2>
+              {description ? (
+                <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="关闭"
+              className="-mr-1.5 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface2 hover:text-text"
+            >
+              <X aria-hidden="true" className="h-5 w-5" />
+            </button>
+          </header>
         </div>
 
-        <header className="flex items-start gap-3 px-5 pb-3 pt-3">
-          <span aria-hidden="true" className={['mt-0.5 h-1.5 w-1.5 shrink-0 rounded-pill', style.bar].join(' ')} />
-          <div className="min-w-0 flex-1">
-            <h2
-              id={headingId}
-              className="text-lg font-extrabold leading-tight tracking-tight text-text"
-            >
-              {title}
-            </h2>
-            {description ? (
-              <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="关闭"
-            className="-mr-1.5 -mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface2 hover:text-text"
-          >
-            <X aria-hidden="true" className="h-5 w-5" />
-          </button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+        {/* 内容：自然流，跟着 dialog 一起滚 */}
+        <div className="px-5 pb-5">{children}</div>
 
         {footer ? (
-          <div className="pb-safe shrink-0 border-t border-border bg-surface px-5 pt-3">
+          // 页脚贴底：疲劳反馈与提交按钮在任何滚动位置都够得着
+          <div className="pb-safe sticky bottom-0 z-10 border-t border-border bg-surface px-5 pt-3">
             {footer}
           </div>
         ) : null}

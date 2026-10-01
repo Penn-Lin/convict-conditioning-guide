@@ -215,16 +215,32 @@ dialog.sheet {
   margin: 0;
   width: 100%;
   max-width: 100%;
-  /* 双写 vh / dvh：老浏览器不认 dvh 时前一行生效，弹窗高度至少不会算成 0（那会整块看不见） */
-  max-height: 90vh;
-  max-height: 90dvh;
+  /*
+   * 高度与滚动全部交给 dialog 自己 —— **不再用「内部 flex + max-height 撑滚动区」**。
+   *
+   * 为什么改（2026-10-02，用户手机上实测到的白屏）：
+   * 内部 flex 布局想正确工作，滚动容器必须从父级拿到**确定的高度约束**，
+   * 而这个约束只能来自 `max-height: *dvh`；移动端 Chrome 的地址栏伸缩会改变 `dvh`，
+   * 重排时 flex 高度会算错 —— 表现就是「内容挤在顶上一条、下面整片空白、页脚跑位」，
+   * 也就是用户截图里的样子。
+   *
+   * 改成 dialog 自身 `overflow-y: auto` 之后，内容按自然流排布，
+   * **没有需要计算的高度**，页头 / 页脚改用 `position: sticky` 贴住上下边。
+   * 观感完全一样，但少了唯一会算错的东西。
+   */
+  max-height: 88vh;
+  max-height: 88dvh;
   padding: 0;
   border: none;
   border-radius: 20px 20px 0 0;
   background-color: rgb(var(--surface));
   color: rgb(var(--text));
   box-shadow: 0 -8px 40px rgb(var(--shadow-color) / 0.18);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* 滚到弹窗两端时不要把滚动传给底下的页面 */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 dialog.sheet::backdrop {
