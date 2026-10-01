@@ -10,7 +10,7 @@
 
 产物清单：
     icon-192.png / icon-512.png                    圆角 + 四角透明，manifest purpose=any
-    icon-maskable-192.png / icon-maskable-512.png  满幅底 + 内容缩到 Android 安全圆内
+    icon-maskable-192.png / icon-maskable-512.png  满幅底 + 内容铺到圆形遮罩内侧（见下方常量）
     apple-touch-icon.png                           180，满幅不透明（iOS 会把透明合成黑角）
     favicon-32.png                                 32，按内容框裁切（见下）
     favicon.ico                                    多尺寸 ICO
@@ -61,7 +61,19 @@ CROP_INSET = 0.015    # 裁完再往里收的比例，甩掉边缘的 JPEG 杂�
 RADIUS_RATIO = 0.20   # 圆角比例（与设计稿自身的圆角一致，实测约 0.207）
 SS = 4                # 圆角遮罩超采样倍率
 
-SAFE_RADIUS = 0.395   # Android maskable 安全圆半径（官方 0.40，留一点余量）
+# ---- maskable ----
+# 内容最远点允许到达的半径。
+#
+# Android 官方建议把内容收在半径 **0.40** 的「安全圆」内（直径 80%），
+# 好处是任何遮罩形状都裁不到内容。但代价很大：内容缩到 0.40 之后，
+# 在圆形遮罩下只占圆面积的 ~64%，视觉上就是「中间一个小图标 + 一圈空底」
+# （用户 2026-10-01 反馈的正是这个）。
+#
+# 这里放宽到 **0.48** —— 仍然落在主流圆形遮罩（半径 0.5，即内切圆）以内，
+# 主流 launcher 切不到；但内容几乎铺满，视觉重量完全不同。
+# 实测本设计稿：0.475 → 缩到 0.851、0.48 → 0.860；再往上（0.49+）铁栏顶部、
+# 左侧计数记号就会被圆形遮罩切到，所以 0.48 是「不被切」前提下的实际上限。
+MASK_CONTENT_RADIUS = 0.48
 MIN_MASK_SCALE = 0.60  # 内容本身就贴边时的兜底，避免缩得过小
 
 INK_THRESHOLD = 120   # 判定「墨迹」的亮度阈值（奶油 ~205，墨 ~0，取中间）
@@ -235,13 +247,13 @@ def rounded(img, size, radius_ratio=RADIUS_RATIO):
 def mask_scale_for(tile):
     """按「最远墨迹像素」反推 maskable 的缩放比。
 
-    安全区是以中心为圆心、直径 80% 的圆。把内容缩到它的最远点正好落在安全半径上即可 ——
-    换设计稿自动适配，不用手调。
+    把内容缩到它的最远点正好落在 `MASK_CONTENT_RADIUS` 上即可 ——
+    换设计稿自动适配，不用手调。为什么不是官方那个 0.40，见常量处的说明。
     """
     r = max_ink_radius(tile)
     if r <= 0:
-        return 0.75
-    return max(MIN_MASK_SCALE, min(1.0, SAFE_RADIUS / r))
+        return 0.85
+    return max(MIN_MASK_SCALE, min(1.0, MASK_CONTENT_RADIUS / r))
 
 
 def maskable(tile, size, scale, cream):
