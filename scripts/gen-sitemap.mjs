@@ -28,12 +28,13 @@ import { dirname, join } from 'node:path';
 /* ---------------------------------------------------------------------------
  * 站点基准 URL
  *
- * 默认值是 Cloudflare **Workers**（静态资源）的地址，格式为
- * `<Worker名>.<账户子域>.workers.dev`；Pages 是 `<项目名>.pages.dev`，两者不通用。
+ * 当前托管在 Cloudflare **Pages**，地址格式为 `<项目名>.pages.dev`。
+ * （Workers 静态资源的格式是 `<Worker名>.<账户子域>.workers.dev`，两者不通用；
+ *   绑了自有域名就把这里换成自己的域名。）
  * ------------------------------------------------------------------------ */
 
 /** 默认站点地址（没有 `SITE_URL` 环境变量时用它） */
-const DEFAULT_SITE_URL = 'https://convict-conditioning-guide.adasoigivea.workers.dev';
+const DEFAULT_SITE_URL = 'https://convict-conditioning-guide.pages.dev';
 
 /** 实际生效的站点地址：环境变量优先，并去掉结尾多余的斜杠 */
 const SITE_URL = (process.env.SITE_URL || DEFAULT_SITE_URL).replace(/\/+$/, '');

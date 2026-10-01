@@ -3,7 +3,7 @@
 > 本文档面向两类读者：**想快速搞清这个站到底做了什么**的人，以及**每天真的要打开它练**的人。
 > 第一部分讲「有什么」，第二部分讲「怎么用」，第三部分讲「你可能没注意到的细节」，第四部分讲「还没做的」。
 
-线上地址：<https://convict-conditioning-guide.adasoigivea.workers.dev>
+线上地址：<https://convict-conditioning-guide.pages.dev>
 
 ---
 
