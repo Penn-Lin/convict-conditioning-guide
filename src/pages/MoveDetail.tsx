@@ -3,10 +3,13 @@
  *
  * 使用场景：训练中掏出手机，快速查「这一式怎么做」，并**打卡确认进阶条件**。
  *
- * v2 阅读顺序（相对 v1 的两处关键调整）：
- * - **紧凑图位条**替代 v1 的 250px 高空灰框 —— 首屏还给标题与打卡卡；
- * - **进阶条件卡上提到「动作描述之后、分块内容之前」** —— v1 的进阶标准埋在页面最底部，
- *   而它恰恰是用户最需要操作的部分。现在它紧跟描述，勾完再往下看细节。
+ * v3 阅读顺序（相对 v2 的两处调整）：
+ * - **动作对照图**（起始姿势 / 结束姿势双图）替代 v2 的紧凑图位条，接上真实示范照片；
+ * - **「要领要点」「常见错误」改为简约列表** —— 去掉逐条的底色块、描边与左侧色条，
+ *   语义由小图标 + 分区标题承担，页面不再被色块切碎。
+ *
+ * v2 保留的关键调整：**进阶条件卡在「动作描述之后、分块内容之前」** ——
+ * v1 的进阶标准埋在页面最底部，而它恰恰是用户最需要操作的部分，现在勾完再往下看细节。
  *
  * 可访问性：折叠面板用 `<button aria-expanded aria-controls>` + `role="region"`；
  * 页内锚点用原生 `<a href="#id">`；难度「文字 + 颜色」双通道；正文 ≥16px / 行高 ≥1.7。
@@ -31,12 +34,13 @@ import { getMove } from '@/data';
 import type { ResolvedMove } from '@/types';
 import { parseStepNo } from '@/lib/slug';
 import { buildMoveFigureLabel } from '@/lib/figureLabel';
+import { moveFigureSrc } from '@/lib/moveFigure';
 import { useDocumentMeta } from '@/lib/seo';
 import { SITE_NAME } from '@/lib/constants';
 import { artTheme } from '@/lib/artTheme';
 import { useTraining } from '@/hooks/TrainingProvider';
 
-import { FigureSlot } from '@/components/ui/FigureSlot';
+import { MoveFigurePair } from '@/components/ui/MoveFigurePair';
 import { DifficultyBadge } from '@/components/ui/DifficultyBadge';
 import { StepList } from '@/components/ui/StepList';
 import { InfoList } from '@/components/ui/InfoList';
@@ -169,32 +173,38 @@ function splitMistake(item: string): { mistake: string; fix: string | null } {
   return { mistake: item.trim(), fix: null };
 }
 
-/** 常见错误：错误表现（红块）/ 纠正方法（绿块）分块呈现，双击通道（标签文字 + 颜色） */
+/**
+ * 常见错误：每条压成一行「错误表现 → 纠正方法」。
+ *
+ * v3 简约化：去掉原先「红块 + 绿块」上下两个色块 —— 五条错误就是十个色块，
+ * 页面被切得很碎。现在只留一枚警示图标，纠正方法用绿色箭头引出，
+ * 语义仍走「形状 + 颜色」双通道，但视觉重量降到与正文同级。
+ */
 function MistakeList({ items }: { items: string[] }) {
   return (
     <ul className="m-0 flex list-none flex-col gap-3 p-0">
       {items.map((item, index) => {
         const { mistake, fix } = splitMistake(item);
         return (
-          <li key={index} className="flex flex-col gap-2">
-            <SemanticNote
-              tone="risk"
-              title="错误表现"
-              icon={
-                <TriangleAlert aria-hidden="true" className="h-4 w-4 text-danger" />
-              }
-            >
+          <li key={index} className="flex items-start gap-2.5">
+            <TriangleAlert
+              aria-hidden="true"
+              className="mt-1.5 h-4 w-4 shrink-0 text-danger"
+            />
+            <div className="min-w-0 flex-1">
               <RichText className="text-base leading-[1.7] text-text" text={mistake} />
-            </SemanticNote>
-            {fix ? (
-              <SemanticNote
-                tone="good"
-                title="纠正方法"
-                icon={<Target aria-hidden="true" className="h-4 w-4 text-success" />}
-              >
-                <RichText className="text-base leading-[1.7] text-text" text={fix} />
-              </SemanticNote>
-            ) : null}
+              {fix ? (
+                <p className="mt-0.5 text-base leading-[1.7] text-text">
+                  <span
+                    aria-hidden="true"
+                    className="mr-1.5 font-semibold text-success"
+                  >
+                    →
+                  </span>
+                  <RichText text={fix} />
+                </p>
+              ) : null}
+            </div>
           </li>
         );
       })}
@@ -349,13 +359,22 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
         </div>
       </header>
 
-      {/* 紧凑图位条（v2：替代 v1 的 250px 高空灰框） */}
+      {/* 动作对照图：起始姿势 / 结束姿势（双图各半宽，不挤占首屏节奏） */}
       <div className="mt-4">
-        <FigureSlot
-          variant="strip"
-          ratio="3/2"
+        <MoveFigurePair
           label={figureLabel}
-          badge={`第 ${stepNo} 式`}
+          figures={[
+            {
+              src: moveFigureSrc(art.slug, stepNo, 1),
+              alt: `${move.nameZh}起始姿势`,
+              caption: '起始姿势',
+            },
+            {
+              src: moveFigureSrc(art.slug, stepNo, 2),
+              alt: `${move.nameZh}结束姿势`,
+              caption: '结束姿势',
+            },
+          ]}
         />
       </div>
 
@@ -433,7 +452,7 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
           icon={CheckCircle2}
           defaultOpen
         >
-          <InfoList variant="success" items={move.keyPoints} />
+          <InfoList appearance="plain" variant="success" items={move.keyPoints} />
         </CollapsibleSection>
 
         <CollapsibleSection
