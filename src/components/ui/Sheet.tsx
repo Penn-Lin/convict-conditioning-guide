@@ -60,6 +60,8 @@ export function Sheet({
   /** 把最新的 onClose 存进 ref：避免因它的引用变化而反复重挂 close 监听 */
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  /** 最近一次打开的时刻，用于忽略「打开瞬间的惯性点击」（见下方遮罩点击） */
+  const openedAtRef = useRef(0);
 
   const style = toneStyle(tone);
 
@@ -71,6 +73,7 @@ export function Sheet({
     if (open && !el.open) {
       el.showModal();
       document.body.classList.add('sheet-open');
+      openedAtRef.current = Date.now();
     } else if (!open && el.open) {
       el.close();
     }
@@ -89,6 +92,9 @@ export function Sheet({
 
     return () => {
       el.removeEventListener('close', handleClose);
+      // 若元素在「模态打开中」被 React 直接从 DOM 摘掉，浏览器可能残留模态状态
+      // （表现为整页点不动）。卸载前显式关一次 —— 此时监听已摘除，不会回调 onClose。
+      if (el.open) el.close();
       document.body.classList.remove('sheet-open');
     };
   }, []);
@@ -98,9 +104,15 @@ export function Sheet({
       ref={ref}
       className="sheet"
       aria-labelledby={headingId}
-      // 点击遮罩关闭：只有点到 dialog 自身（内容之外）才算遮罩
+      // 点击遮罩关闭：只有点到 dialog 自身（内容之外）才算遮罩。
+      //
+      // 但打开后的头 350ms 要忽略点击 —— 点「开始训练 / 调整」的那一下，
+      // 手指抬起时弹窗已经弹出，这一下会落在遮罩上把弹窗当场关掉，
+      // 用户看到的就是「弹窗一闪就没了」。触屏上尤其明显。
       onClick={(event) => {
-        if (event.target === ref.current) onClose();
+        if (event.target !== ref.current) return;
+        if (Date.now() - openedAtRef.current < 350) return;
+        onClose();
       }}
     >
       <div className="flex max-h-[90dvh] flex-col lg:max-h-[84dvh]">

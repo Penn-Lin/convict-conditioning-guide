@@ -215,6 +215,8 @@ dialog.sheet {
   margin: 0;
   width: 100%;
   max-width: 100%;
+  /* 双写 vh / dvh：老浏览器不认 dvh 时前一行生效，弹窗高度至少不会算成 0（那会整块看不见） */
+  max-height: 90vh;
   max-height: 90dvh;
   padding: 0;
   border: none;
@@ -247,6 +249,7 @@ dialog.sheet[open] {
     inset: 0;
     margin: auto;
     width: min(560px, calc(100vw - 48px));
+    max-height: 84vh;
     max-height: 84dvh;
     border-radius: 20px;
   }

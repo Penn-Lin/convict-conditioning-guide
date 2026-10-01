@@ -20,6 +20,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { DisclaimerBar } from '@/components/layout/DisclaimerBar';
 import { BottomNav } from '@/components/ui/BottomNav';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { TrainingProvider } from '@/hooks/TrainingProvider';
 
 /**
@@ -50,7 +51,14 @@ export function AppLayout() {
         <Header />
 
         <div className="flex flex-1 flex-col">
-          <Outlet />
+          {/*
+            错误边界只包页面内容，不包 Header / BottomNav / Footer ——
+            这样万一一页渲染崩了，用户还能靠底部导航切走，不至于整站白屏。
+            `key={pathname}` 让路由一变化就自动复位，不必手动刷新。
+          */}
+          <ErrorBoundary key={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
 
         <Footer />
