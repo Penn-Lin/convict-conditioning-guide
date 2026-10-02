@@ -6,6 +6,7 @@ import { ArtsOverview } from '@/pages/ArtsOverview';
 import { ArtDetail } from '@/pages/ArtDetail';
 import { MoveDetail } from '@/pages/MoveDetail';
 import { Plan } from '@/pages/Plan';
+import { TodayMoves } from '@/pages/TodayMoves';
 import { Principles } from '@/pages/Principles';
 import { About } from '@/pages/About';
 import { NotFound } from '@/pages/NotFound';
@@ -19,6 +20,7 @@ import { NotFound } from '@/pages/NotFound';
  * - `/arts/:artSlug`         六艺详情（进度时间线）
  * - `/arts/:artSlug/:stepNo` 十式详情（核心页：动作指导 + 进阶条件打卡）
  * - `/plan`                  今日训练计划（v2 新增：动态生成 + 解释 + 记录闭环）
+ * - `/plan/today`            今日动作速览（一页一个动作，横向翻页；练前过一遍用）
  * - `/principles`            训练原则
  * - `/about`                 关于 / 免责声明
  * - `*`                      404 兜底
@@ -46,6 +48,8 @@ export function App() {
           <Route path="/arts/:artSlug" element={<ArtDetail />} />
           <Route path="/arts/:artSlug/:stepNo" element={<MoveDetail />} />
           <Route path="/plan" element={<Plan />} />
+          {/* 今日动作速览：一页一个动作的翻页视图（练前过一遍用） */}
+          <Route path="/plan/today" element={<TodayMoves />} />
           <Route path="/principles" element={<Principles />} />
           <Route path="/about" element={<About />} />
 

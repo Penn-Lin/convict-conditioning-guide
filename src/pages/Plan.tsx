@@ -21,6 +21,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Dumbbell,
+  Eye,
   Info,
   Lightbulb,
   ListChecks,
@@ -270,7 +271,17 @@ export function Plan() {
               ))}
             </ul>
 
-            <Button className="mt-4 w-full" size="lg" onClick={() => setLogOpen(true)}>
+            {/*
+              练前的动线收口：先把今天的动作横向过一遍（尤其是第一次做的），再开始记录。
+              放在主按钮**上方**而不是板块标题旁 —— 移动端标题旁并排两个小按钮会挤，
+              而这一步本来就发生在「开始训练」之前。
+            */}
+            <Button className="mt-4 w-full" size="lg" variant="secondary" to="/plan/today">
+              <Eye aria-hidden="true" className="h-4 w-4" />
+              先看今天的 {items.length} 个动作
+            </Button>
+
+            <Button className="mt-2.5 w-full" size="lg" onClick={() => setLogOpen(true)}>
               <ListChecks aria-hidden="true" className="h-4 w-4" />
               开始训练 · 记录完成情况
             </Button>

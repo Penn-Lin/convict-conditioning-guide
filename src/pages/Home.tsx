@@ -225,9 +225,22 @@ export function Home() {
               开始训练
             </Button>
 
-            <p className="mt-2.5 text-center text-xs leading-relaxed text-muted">
-              时间、换方案、逐组记录都在训练页
-            </p>
+            {/*
+              首页的原则是「只回答今天做什么、不承担操作」，因此这里**不新增按钮、不新增色块** ——
+              只把原有那一行文案的位置换成入口链接，主按钮仍是本页唯一的实心按钮。
+            */}
+            <div className="mt-3 flex flex-col items-center gap-0.5">
+              <Link
+                to="/plan/today"
+                className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent underline-offset-2 hover:underline"
+              >
+                先看今天的 {1 + assists.length} 个动作
+                <ArrowRight aria-hidden="true" className="h-4 w-4" />
+              </Link>
+              <p className="text-center text-xs leading-relaxed text-muted">
+                时间、换方案、逐组记录都在训练页
+              </p>
+            </div>
           </div>
         )}
       </Section>
