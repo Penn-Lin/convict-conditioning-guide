@@ -204,52 +204,43 @@ export function AdjustSheet({
           ) : null}
         </div>
 
-        {/* ①b 没环境练的两门 —— 一键长期关闭（原书模板下特别常用） */}
+        {/* ①b 没环境练的两门 —— 小按钮 + 灰色小字，刻意不跟上面的「训练安排方式」同形 */}
         <div>
-          <p className="flex items-center gap-1.5 text-sm font-bold text-text">
-            <Wrench aria-hidden="true" className="h-4 w-4 text-accent" />
-            没环境练的科目
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            桥需要能仰卧后弯的地面、倒立撑需要墙面 —— 这两门对场地有硬要求。
-            打开后它们会从<b>每一天</b>的计划里移除（不是只跳今天），随时可以关掉。
-          </p>
+          {/*
+            形态刻意压到最小：它是一句「我不练这两门」的**一次性设置**，
+            不是每天都要做的选择，做成和上面四个排期模式同形的大行使它看起来像同级选项。
+
+            配色用 guide 紫（`lib/tones.ts` 里「引导 / 说明」那一档）：离开本板块的
+            action 橙，才不会让人以为它是「训练安排方式」的第四项；
+            与 §⑤ 进阶测试的紫区分靠形状 —— 那边是三列实心 chips，这边是一枚小胶囊。
+
+            触控面积：胶囊本身只有 36px 高（用户要求「很小」），
+            靠伪元素向上下各撑 4px 到 44px 达标（项目约定触控目标 ≥44px）。
+          */}
           <button
             type="button"
             aria-pressed={envOff.length > 0}
             onClick={toggleEnvSkills}
             className={[
-              'mt-2.5 flex min-h-[52px] w-full items-center gap-3 rounded-md border p-3 text-left transition-colors',
+              "relative inline-flex min-h-9 items-center gap-1.5 rounded-pill border px-3 text-xs font-bold transition-colors before:absolute before:-inset-x-0.5 before:-inset-y-1 before:content-['']",
               envOff.length > 0
-                ? 'border-accent bg-accent-soft'
-                : 'border-border-strong bg-surface hover:border-accent',
+                ? 'border-violet bg-violet text-bg'
+                : 'border-violet/40 bg-surface text-violet hover:bg-violet-soft',
             ].join(' ')}
           >
-            <span
-              aria-hidden="true"
-              className={[
-                'flex h-5 w-5 shrink-0 items-center justify-center rounded-pill border-2',
-                envOff.length > 0 ? 'border-accent' : 'border-border-strong',
-              ].join(' ')}
-            >
-              {envOff.length > 0 ? <span className="h-2.5 w-2.5 rounded-pill bg-accent" /> : null}
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-text">
-                {envOff.length > 0 ? `已关闭：${envOffNames}` : '我没环境练桥和倒立撑'}
-              </span>
-              <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                {envOff.length > 0
-                  ? '点一下恢复这两门 —— 它们会重新回到计划里。'
-                  : '点一下把这两门从所有计划里长期移除。'}
-              </span>
-            </span>
+            <Wrench aria-hidden="true" className="h-3.5 w-3.5" />
+            {envOff.length > 0 ? `已关闭 ${envOffNames} · 点一下恢复` : '没环境练桥 / 倒立撑'}
           </button>
+
+          <p className="mt-1.5 text-xs leading-relaxed text-muted">
+            桥要有能仰卧后弯的地面、倒立撑要有墙面。点一下把这两门从
+            <span className="text-text">每一天</span>的计划里移除（长期设置，不是只跳今天）。
+          </p>
+
           {scheduleMode === 'textbook-beginner' ? (
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              当前用的是「{TEXTBOOK_PLANS['textbook-beginner'].name}」，
-              它本来就不含桥与倒立撑；这个开关在你切回
-              「{TEXTBOOK_PLANS['textbook-steady'].name}」或自动调度时才起作用。
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              当前「{TEXTBOOK_PLANS['textbook-beginner'].name}」本来就不含这两门，
+              切回「{TEXTBOOK_PLANS['textbook-steady'].name}」或自动调度时才起作用。
             </p>
           ) : null}
         </div>
