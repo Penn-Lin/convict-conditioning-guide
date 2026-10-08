@@ -178,6 +178,8 @@ export interface ExplainInput {
     tier: number;
     /** 因距上次训练不足而今天不排的科目名 */
     resting: string[];
+    /** 被用户**长期关闭**的科目名（`TrainingSkill.excluded`，如「没环境练桥和倒立撑」） */
+    skipped: string[];
     /** 是否走了「全部未到期」的兜底（昨天刚练过） */
     allResting: boolean;
   };
@@ -246,13 +248,22 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
       schedule.resting.length > 0
         ? `其中 ${schedule.resting.join('、')}距上次训练不足 ${TEXTBOOK_REST_DAYS} 天，今天不排。`
         : '';
+    /*
+     * 长期关闭的科目必须在这里单独提一句。
+     * 「渐入佳境」的 tagline 是「六艺全练」，实际只排出四项却不解释，
+     * 用户第一反应是「我的设置没生效 / 系统算错了」。
+     */
+    const skippedText =
+      schedule.skipped.length > 0
+        ? `你已长期关闭 ${schedule.skipped.join('、')}，所以本次实际是 ${countDecision.total} 门；想恢复就在「调整」里关掉那个开关。`
+        : '';
     reasons.push({
       code: schedule.allResting ? 'TEXTBOOK_ALL_RESTING' : 'TEXTBOOK_SCHEDULE',
       text: schedule.allResting
         ? `今天所有科目距上次训练都不足 ${TEXTBOOK_REST_DAYS} 天（昨天刚练过）。按原书「如果你觉得并无大碍还可以训练，那就练些低难度的动作」，本次保留全部科目但统一降到${tierLabel(0)}（每门 1 组）。`
         : `按原书「${schedule.name}」安排：${schedule.tagline}。科目由原书清单决定，与今天是星期几无关 —— 距上次训练满 ${TEXTBOOK_REST_DAYS} 天的科目今天到期，一共 ${
             countDecision.total
-          } 项。每一项按${tierLabel(schedule.tier)}安排，这是原书「我通常建议练习两组」的日常量。${restingText}`,
+          } 项。每一项按${tierLabel(schedule.tier)}安排，这是原书「我通常建议练习两组」的日常量。${restingText}${skippedText}`,
       values: { tier: schedule.tier, items: countDecision.total },
     });
     reasons.push({
@@ -370,10 +381,14 @@ export function buildReasons(input: ExplainInput): PlanReason[] {
   }
 
   // ⑦ 未选中项目（含硬排除与低优先级）
+  //
+  // `USER_EXCLUDE` 单独走自己的语义码：那是「按你的要求不排」，
+  // 该以中性说明出现，而不是跟「昨天刚练过 / 太累」一样标红 ——
+  // 把用户自己的决定渲染成风险警告，会让人以为设置出了问题。
   for (const record of excluded) {
     reasons.push({
       skill: record.skill,
-      code: 'OVERLAP_RECENT',
+      code: record.code === 'USER_EXCLUDE' ? 'USER_EXCLUDE' : 'OVERLAP_RECENT',
       text: record.text,
       values: { code: record.code },
     });

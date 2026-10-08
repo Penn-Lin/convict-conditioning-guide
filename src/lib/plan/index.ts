@@ -259,17 +259,40 @@ function buildTextbookDailyPlan(input: {
   const options = ctx.options;
   const planDef = textbookPlanOf(mode)!;
 
-  const selection = resolveTemplate(mode, snapshots, options.excludeSkills ?? []);
+  /*
+   * 长期关闭的科目（`TrainingSkill.excluded`）—— **模板模式也必须认它**。
+   *
+   * 这一条以前是断的：`skill.excluded` 只在 `auto` 模式的硬门控里被读到，
+   * 模板模式直接抄 `options.excludeSkills`（当天排除），于是「我没有环境练桥和倒立撑」
+   * 这个长期设置在原书模板下**完全不起作用** —— 用户每天还是要看到那两门。
+   * 现在把长期开关与当天排除合并成一份「今天不排的科目」，交给同一个 `resolveTemplate`。
+   */
+  const longTermExcluded = snapshots
+    .filter((snapshot) => state.skills[snapshot.slug].excluded && planDef.arts.includes(snapshot.slug))
+    .map((snapshot) => snapshot.slug);
+
+  const skipped = [
+    ...new Set([...(options.excludeSkills ?? []), ...longTermExcluded]),
+  ] as ArtSlug[];
+
+  /** 长期关闭 → 结构化排除记录（UI 用「已按你的要求」口径展示，而不是红字追责） */
+  const excludedRecords: ExclusionRecord[] = longTermExcluded.map((slug) => ({
+    skill: slug,
+    code: 'USER_EXCLUDE',
+    text: '你已在「调整」里长期关闭了这一门（比如没环境练），今天不排它。',
+  }));
+
+  const selection = resolveTemplate(mode, snapshots, skipped);
 
   // 科目按优先级排序：主训 = 今天科目里优先级最高的那门（「体力最好时做最难的」）
   const selected = ranked.filter((snapshot) => selection.arts.includes(snapshot.slug));
   const mainSnapshot = selected[0];
 
-  // 兜底：科目全被排除（理论上不会，模板是固定清单）→ 走恢复日，绝不返回空白页
+  // 兜底：科目全被排除（例如把六门全关掉）→ 走恢复日，绝不返回空白页
   if (!mainSnapshot) {
     return buildRecoveryPlan(
       ctx,
-      [],
+      excludedRecords,
       scores,
       {
         base: selection.arts.length,
@@ -365,8 +388,13 @@ function buildTextbookDailyPlan(input: {
     totalEstimatedMinutes,
   );
 
-  // 未排进今天、也不是「休息中」的科目（初试身手不含桥与倒立撑，那两门会落在这里）
-  const outsideTemplate = ranked.filter((snapshot) => !selection.arts.includes(snapshot.slug));
+  // 未排进今天、也不是「休息中」的科目（初试身手不含桥与倒立撑，那两门会落在这里）。
+  // 被用户长期关闭的排除在外 —— 它们已经有专门的「已按你的要求不排」解释，不该再报一次
+  // 「今天优先级排在后面」（那会把「你关的」说成「引擎算的」）。
+  const outsideTemplate = ranked.filter(
+    (snapshot) =>
+      !selection.arts.includes(snapshot.slug) && !longTermExcluded.includes(snapshot.slug),
+  );
 
   const countDecision = {
     base: selection.arts.length,
@@ -387,7 +415,7 @@ function buildTextbookDailyPlan(input: {
     })),
     unselected: outsideTemplate,
     scores,
-    excluded: [],
+    excluded: excludedRecords,
     options,
     minutes: ctx.minutes,
     totalEstimatedMinutes,
@@ -403,6 +431,7 @@ function buildTextbookDailyPlan(input: {
       source: planDef.source,
       tier: chosenFloor,
       resting: selection.resting.map((slug) => getArt(slug)?.nameZh ?? slug),
+      skipped: longTermExcluded.map((slug) => getArt(slug)?.nameZh ?? slug),
       allResting: selection.allResting,
     },
   });

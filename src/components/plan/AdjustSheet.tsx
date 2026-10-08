@@ -9,7 +9,7 @@
  * 这样「它们是一组」的联系由形状承担，颜色只负责回答「这是哪一个」。
  * 时间档四项同形同色（action 橙）；六艺 chips 同形但各带本门色相（标识是哪门艺）。
  */
-import { CalendarRange, Layers, Minus, Plus, RefreshCw, RotateCcw, Sparkles, Target, Timer } from 'lucide-react';
+import { CalendarRange, Layers, Minus, Plus, RefreshCw, RotateCcw, Sparkles, Target, Timer, Wrench } from 'lucide-react';
 import type { ArtSlug } from '@/types';
 import type { DailyPlan, PlanOptions, ScheduleMode, SessionMinutes } from '@/types/plan';
 import { ART_ORDER } from '@/lib/constants';
@@ -18,8 +18,19 @@ import { getArt } from '@/data';
 import { MINUTE_BUDGET, TEXTBOOK_PLANS, TIER_NAME_CN, tierLabel } from '@/lib/plan/config';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
+import { useConfirm } from '@/hooks/useConfirm';
 
 const MINUTES_OPTIONS: SessionMinutes[] = [15, 30, 45, 60];
+
+/**
+ * 「没环境练」的两门。
+ *
+ * 为什么是这两门：原书六艺里，桥（需地面垫、脊柱后弯空间）与倒立撑（需墙面 / 倒立架）
+ * 对场地有硬要求，而俯卧撑 / 深蹲 / 引体 / 举腿几乎随时随地可做。
+ * 用户明确反馈「多数情况没有环境练这两个」—— 这是最常见的一类排除需求，
+ * 因此给它一个**一键开关**，而不是让人每门艺各点一次。
+ */
+const ENV_SKILLS: readonly ArtSlug[] = ['bridges', 'handstand-pushups'];
 
 /** 排期模式三选一（顺序即展示顺序） */
 const SCHEDULE_OPTIONS: readonly {
@@ -65,6 +76,10 @@ export interface AdjustSheetProps {
   scheduleMode: ScheduleMode;
   /** 切换**长期**排期模式（写回档案，不只是今天） */
   onScheduleModeChange: (mode: ScheduleMode) => void;
+  /** 长期关闭的艺（`TrainingSkill.excluded`，写回存储、影响每一天） */
+  excludedSkills: ArtSlug[];
+  /** 切换某门艺的长期开关 */
+  onExcludedChange: (slug: ArtSlug, excluded: boolean) => void;
 }
 
 /**
@@ -81,11 +96,30 @@ export function AdjustSheet({
   resetPlanOptions,
   scheduleMode,
   onScheduleModeChange,
+  excludedSkills,
+  onExcludedChange,
 }: AdjustSheetProps) {
+  const confirm = useConfirm();
   const excludeSkills = plan.appliedOptions.excludeSkills ?? [];
   const delta = plan.appliedOptions.setsDelta ?? 0;
   const override = plan.appliedOptions.volumeTierOverride;
   const challenges = plan.appliedOptions.challengeSkills ?? [];
+
+  /** 已被长期关闭的「没环境练」两门 */
+  const envOff = ENV_SKILLS.filter((slug) => excludedSkills.includes(slug));
+  const envOffNames = envOff.map((slug) => getArt(slug)?.nameZh ?? slug).join('、');
+
+  /**
+   * 一键开关：把桥与倒立撑一起长期关掉 / 恢复。
+   *
+   * 单个艺的长期开关落在 `TrainingSkill.excluded`（不是当天排除），
+   * 因此这里点完之后**今天与以后每一天**都按新清单排，
+   * 与下面「今天不想练哪门」（只作用于今天）是两个不同层级的东西。
+   */
+  const toggleEnvSkills = () => {
+    const next = envOff.length === 0;
+    for (const slug of ENV_SKILLS) onExcludedChange(slug, next);
+  };
 
   /** 今天实际用到的档位（各门可能不同，取集合用于显示） */
   const activeTiers = Array.from(
@@ -166,6 +200,56 @@ export function AdjustSheet({
               <Sparkles aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet" />
               原书模板下科目由清单固定，与星期几无关：距上次训练满 2 天的科目今天就会排进来。
               隔天练时六门全部到期，所以每次都是全练。
+            </p>
+          ) : null}
+        </div>
+
+        {/* ①b 没环境练的两门 —— 一键长期关闭（原书模板下特别常用） */}
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-bold text-text">
+            <Wrench aria-hidden="true" className="h-4 w-4 text-accent" />
+            没环境练的科目
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            桥需要能仰卧后弯的地面、倒立撑需要墙面 —— 这两门对场地有硬要求。
+            打开后它们会从<b>每一天</b>的计划里移除（不是只跳今天），随时可以关掉。
+          </p>
+          <button
+            type="button"
+            aria-pressed={envOff.length > 0}
+            onClick={toggleEnvSkills}
+            className={[
+              'mt-2.5 flex min-h-[52px] w-full items-center gap-3 rounded-md border p-3 text-left transition-colors',
+              envOff.length > 0
+                ? 'border-accent bg-accent-soft'
+                : 'border-border-strong bg-surface hover:border-accent',
+            ].join(' ')}
+          >
+            <span
+              aria-hidden="true"
+              className={[
+                'flex h-5 w-5 shrink-0 items-center justify-center rounded-pill border-2',
+                envOff.length > 0 ? 'border-accent' : 'border-border-strong',
+              ].join(' ')}
+            >
+              {envOff.length > 0 ? <span className="h-2.5 w-2.5 rounded-pill bg-accent" /> : null}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-text">
+                {envOff.length > 0 ? `已关闭：${envOffNames}` : '我没环境练桥和倒立撑'}
+              </span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                {envOff.length > 0
+                  ? '点一下恢复这两门 —— 它们会重新回到计划里。'
+                  : '点一下把这两门从所有计划里长期移除。'}
+              </span>
+            </span>
+          </button>
+          {scheduleMode === 'textbook-beginner' ? (
+            <p className="mt-2 text-xs leading-relaxed text-muted">
+              当前用的是「{TEXTBOOK_PLANS['textbook-beginner'].name}」，
+              它本来就不含桥与倒立撑；这个开关在你切回
+              「{TEXTBOOK_PLANS['textbook-steady'].name}」或自动调度时才起作用。
             </p>
           ) : null}
         </div>
@@ -427,8 +511,19 @@ export function AdjustSheet({
             <Button
               variant="ghost"
               onClick={() => {
-                resetPlanOptions();
-                onClose();
+                // 二次确认：重置一次会把今天所有调整一次性抹掉，且没有「重做」入口
+                void confirm({
+                  title: '重置今天的全部调整？',
+                  description: `今天已调整 ${plan.revision} 次（时间档 / 档位 / 加减组 / 排除项），重置会全部清空，回到默认计算结果。`,
+                  details: ['长期设置（排期模式、长期关闭的科目）不受影响'],
+                  confirmLabel: '确认重置',
+                  cancelLabel: '取消',
+                  danger: true,
+                }).then((ok) => {
+                  if (!ok) return;
+                  resetPlanOptions();
+                  onClose();
+                });
               }}
             >
               <RotateCcw aria-hidden="true" className="h-4 w-4" />

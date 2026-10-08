@@ -22,6 +22,7 @@ import { DisclaimerBar } from '@/components/layout/DisclaimerBar';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { TrainingProvider } from '@/hooks/TrainingProvider';
+import { ConfirmProvider } from '@/hooks/useConfirm';
 
 /**
  * 全站布局。
@@ -42,30 +43,32 @@ export function AppLayout() {
   }, [pathname, hash]);
 
   return (
-    <TrainingProvider>
-      <div className="flex min-h-screen flex-col bg-bg text-text">
-        <section aria-label="安全提示">
-          <DisclaimerBar />
-        </section>
+    <ConfirmProvider>
+      <TrainingProvider>
+        <div className="flex min-h-screen flex-col bg-bg text-text">
+          <section aria-label="安全提示">
+            <DisclaimerBar />
+          </section>
 
-        <Header />
+          <Header />
 
-        <div className="flex flex-1 flex-col">
-          {/*
-            错误边界只包页面内容，不包 Header / BottomNav / Footer ——
-            这样万一一页渲染崩了，用户还能靠底部导航切走，不至于整站白屏。
-            `key={pathname}` 让路由一变化就自动复位，不必手动刷新。
-          */}
-          <ErrorBoundary key={pathname}>
-            <Outlet />
-          </ErrorBoundary>
+          <div className="flex flex-1 flex-col">
+            {/*
+              错误边界只包页面内容，不包 Header / BottomNav / Footer ——
+              这样万一一页渲染崩了，用户还能靠底部导航切走，不至于整站白屏。
+              `key={pathname}` 让路由一变化就自动复位，不必手动刷新。
+            */}
+            <ErrorBoundary key={pathname}>
+              <Outlet />
+            </ErrorBoundary>
+          </div>
+
+          <Footer />
+
+          {/* 移动端底部标签栏（< md） */}
+          <BottomNav />
         </div>
-
-        <Footer />
-
-        {/* 移动端底部标签栏（< md） */}
-        <BottomNav />
-      </div>
-    </TrainingProvider>
+      </TrainingProvider>
+    </ConfirmProvider>
   );
 }

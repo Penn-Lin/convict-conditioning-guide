@@ -32,13 +32,14 @@ import { toneStyle } from '@/lib/tones';
 
 import { getMove } from '@/data';
 import type { ResolvedMove } from '@/types';
-import { parseStepNo } from '@/lib/slug';
+import { moveHref, parseStepNo } from '@/lib/slug';
 import { buildMoveFigureLabel } from '@/lib/figureLabel';
 import { moveFigureSrc } from '@/lib/moveFigure';
 import { useDocumentMeta } from '@/lib/seo';
 import { SITE_NAME } from '@/lib/constants';
 import { artTheme } from '@/lib/artTheme';
 import { useTraining } from '@/hooks/TrainingProvider';
+import { useConfirm } from '@/hooks/useConfirm';
 
 import { MoveFigurePair } from '@/components/ui/MoveFigurePair';
 import { DifficultyBadge } from '@/components/ui/DifficultyBadge';
@@ -307,11 +308,61 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
   const figureLabel = buildMoveFigureLabel(move);
 
   const training = useTraining();
+  const confirm = useConfirm();
   const goals = training.goalsOf(art.slug, stepNo);
   const checks = training.store.skills[art.slug].checks[stepNo];
   const completed = training.store.skills[art.slug].completedSteps.includes(stepNo);
   const checkedCount = checks?.slice(0, goals.length).filter(Boolean).length ?? 0;
   const allChecked = goals.length > 0 && checkedCount === goals.length;
+
+  /** 顺位门控：本式之前还没完成的式号（非空 = 不允许标记完成本式） */
+  const missingSteps = training.missingStepsOf(art.slug, stepNo);
+  const blocked = missingSteps.length > 0;
+  const nextStepName = move.nextStep?.nameZh ?? null;
+  /** 被门控挡住时，「回去补打卡」的目标 = 第一个未完成的式 */
+  const prerequisiteHref = blocked ? moveHref(art.slug, missingSteps[0]) : null;
+
+  /**
+   * 标记完成本式的统一入口（含二次确认）。
+   *
+   * `skipped` 决定文案与按钮样式：
+   * - `false`（条件勾满）→ 普通确认，说明会进入第 N+1 式；
+   * - `true`（跳过条件）→ 红色警示确认，明说「条件没勾满也算完成」。
+   */
+  const handleComplete = async (skipped: boolean) => {
+    const target = move.nextStep
+      ? `第 ${stepNo + 1} 式「${move.nextStep.nameZh}」`
+      : '本门艺的收尾';
+
+    const ok = await confirm({
+      title: `把第 ${stepNo} 式「${move.nameZh}」标记为已完成？`,
+      description: skipped
+        ? `进阶条件只勾了 ${checkedCount}/${goals.length} 项。确认后依然会把本式算作过关，并进入${target}。`
+        : `进阶条件已勾满（${checkedCount}/${goals.length}）。确认后将进入${target}。`,
+      details: [
+        `${art.nameZh}的当前式号会推进到第 ${Math.min(10, stepNo + 1)} 式`,
+        '进度保存在本机浏览器里，随时可以回到本页点「撤销」退回',
+      ],
+      confirmLabel: skipped ? '跳过条件并完成' : '确认完成',
+      cancelLabel: '再看看',
+      danger: skipped,
+    });
+    if (!ok) return;
+    training.completeStep(art.slug, stepNo);
+  };
+
+  const handleUndo = async () => {
+    const ok = await confirm({
+      title: `撤销第 ${stepNo} 式的完成标记？`,
+      description: `会把第 ${stepNo} 式及其之后所有已完成标记一并去掉，并把当前式号退回第 ${stepNo} 式。`,
+      details: ['训练记录与训练量档位不受影响，只改「哪几式已过关」'],
+      confirmLabel: '确认撤销',
+      cancelLabel: '取消',
+      danger: true,
+    });
+    if (!ok) return;
+    training.undoStep(art.slug, stepNo);
+  };
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pb-nav-cta pt-5 sm:px-6">
@@ -403,10 +454,19 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
         goals={goals}
         checks={checks}
         completed={completed}
-        nextStepName={move.nextStep?.nameZh ?? null}
+        nextStepName={nextStepName}
+        missingSteps={missingSteps}
+        prerequisiteHref={prerequisiteHref}
         onToggle={(index) => training.toggleStepCheck(art.slug, stepNo, index)}
-        onComplete={() => training.completeStep(art.slug, stepNo)}
-        onUndo={() => training.undoStep(art.slug, stepNo)}
+        onComplete={() => {
+          void handleComplete(!allChecked);
+        }}
+        onSkipComplete={() => {
+          void handleComplete(true);
+        }}
+        onUndo={() => {
+          void handleUndo();
+        }}
       />
 
       {/* 页内锚点条（吸顶） */}
@@ -572,16 +632,27 @@ function MoveArticle({ move }: { move: ResolvedMove }) {
             <p
               className={[
                 'tnum text-sm font-bold',
-                allChecked || completed ? 'text-success' : 'text-text',
+                blocked ? 'text-violet' : completed ? 'text-success' : 'text-text',
               ].join(' ')}
             >
               {completed
-                ? '本式已完成'
-                : `进阶条件 ${checkedCount}/${goals.length}`}
+                ? blocked
+                  ? `已完成 · 但第 ${missingSteps.join('、')} 式还空着`
+                  : '本式已完成'
+                : blocked
+                  ? `前置未完成：第 ${missingSteps.join('、')} 式`
+                  : `进阶条件 ${checkedCount}/${goals.length}`}
             </p>
           </div>
 
-          {completed && move.nextStep ? (
+          {blocked && prerequisiteHref ? (
+            // 门控（含「已完成但有断档」）时，把「去打卡」换成「去补完那一式」——
+            // 否则用户滚过去也只会看到一个灰按钮，或者对断档毫无察觉。
+            <Button to={prerequisiteHref}>
+              补完第 {missingSteps[0]} 式
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          ) : completed && move.nextStep ? (
             <Button to={move.nextStep.href}>
               下一式
               <ChevronRight aria-hidden="true" className="h-4 w-4" />

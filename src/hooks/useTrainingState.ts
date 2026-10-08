@@ -27,7 +27,7 @@ import { ART_ORDER } from '@/lib/constants';
 
 import { generateDailyPlan, replan as replanEngine } from '@/lib/plan';
 import { MINUTE_BUDGET } from '@/lib/plan/config';
-import { applyVerdict, judgeSession, summarizeOutcome } from '@/lib/plan/progression';
+import { applyVerdict, isStepUnlocked as isStepUnlockedFn, judgeSession, missingPrerequisites, summarizeOutcome } from '@/lib/plan/progression';
 import {
   clampStep,
   createEmptyStore,
@@ -113,6 +113,15 @@ export interface UseTrainingStateResult {
   goalsOf: (slug: ArtSlug, stepNo: number) => ReturnType<typeof splitProgressionGoals>;
   /** 某一式是否已勾满全部条件 */
   isStepSatisfied: (slug: ArtSlug, stepNo: number) => boolean;
+  /**
+   * 本式**前置的、还没完成的**式号（升序）。
+   *
+   * 六艺十式是线性阶梯：第 N 式必须在 1…N−1 全部完成之后才能标记完成。
+   * 空数组 = 可以完成本式。UI 用它在按钮上写明「先补完第 1、2 式」。
+   */
+  missingStepsOf: (slug: ArtSlug, stepNo: number) => number[];
+  /** 本式是否已解锁（= `missingStepsOf(...).length === 0`） */
+  isStepUnlocked: (slug: ArtSlug, stepNo: number) => boolean;
 
   /* ---- 计划 ---- */
   /** 把当前（派生的）计划固化到存储，避免训练过程中计划漂移 */
@@ -286,6 +295,16 @@ export function useTrainingState(): UseTrainingStateResult {
     [goalsOf, store.skills],
   );
 
+  const missingStepsOf = useCallback(
+    (slug: ArtSlug, stepNo: number) => missingPrerequisites(store.skills[slug], stepNo),
+    [store.skills],
+  );
+
+  const isStepUnlocked = useCallback(
+    (slug: ArtSlug, stepNo: number) => isStepUnlockedFn(store.skills[slug], stepNo),
+    [store.skills],
+  );
+
   const toggleStepCheck = useCallback(
     (slug: ArtSlug, stepNo: number, index: number) => {
       commit((prev) => {
@@ -307,11 +326,19 @@ export function useTrainingState(): UseTrainingStateResult {
     [commit, goalsOf],
   );
 
-  /** 完成本式：记录已完成 + 推进到下一式（难度变更必须由用户点击驱动） */
+  /**
+   * 完成本式：记录已完成 + 推进到下一式（难度变更必须由用户点击驱动）。
+   *
+   * **顺位门控**：第 N 式之前的式必须全部完成，否则本次调用**直接返回不动**。
+   * 这是防「误触跳级」的最后一道闸 —— UI 已禁用按钮，但事件处理器与旧版本数据
+   * 都可能绕过 UI，因此这里再判一次。判据与 `missingPrerequisites` 同源。
+   */
   const completeStep = useCallback(
     (slug: ArtSlug, stepNo: number) => {
       commit((prev) => {
         const skill = prev.skills[slug];
+        if (!isStepUnlockedFn(skill, stepNo)) return prev;
+
         const completed = Array.from(new Set([...skill.completedSteps, stepNo])).sort(
           (a, b) => a - b,
         );
@@ -334,7 +361,11 @@ export function useTrainingState(): UseTrainingStateResult {
     [commit],
   );
 
-  /** 撤销完成：退回到本式（并把下一式从已完成里去掉） */
+  /**
+   * 撤销完成：退回到本式（并把本式及之后从已完成里去掉）。
+   *
+   * 刻意**不加顺位门控**：这是「往回退」的操作，退到哪都只会让链条更短、不会断裂。
+   */
   const undoStep = useCallback(
     (slug: ArtSlug, stepNo: number) => {
       commit((prev) => {
@@ -535,6 +566,8 @@ export function useTrainingState(): UseTrainingStateResult {
     undoStep,
     goalsOf,
     isStepSatisfied,
+    missingStepsOf,
+    isStepUnlocked,
     persistPlan,
     patchPlan,
     resetPlanOptions,

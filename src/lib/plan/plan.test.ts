@@ -33,7 +33,7 @@ import { generateDailyPlan, replan, resolveScheduleMode, weekCompletedCount } fr
 import { buildSnapshots } from './snapshot';
 import { applyGate } from './gate';
 import { MINUTE_BUDGET } from './config';
-import { judgeSession, summarizeOutcome } from './progression';
+import { judgeSession, missingPrerequisites, summarizeOutcome } from './progression';
 import { parseVolumeLadder, inferTier } from './volumeLadder';
 
 /* ---------------------------------------------------------------------------
@@ -771,6 +771,48 @@ describe('textbook · 原书模板的科目解析', () => {
     );
   });
 
+  it('长期关闭的科目在模板模式下真的不排（「我没环境练桥和倒立撑」）', () => {
+    // 回归防线：`skill.excluded` 以前只在 auto 模式的硬门控里被读到，
+    // 模板模式直接抄当天排除 → 这个长期开关在原书模板下完全不起作用。
+    const state = stateTrainedDaysAgo(2);
+    state.skills.bridges.excluded = true;
+    state.skills['handstand-pushups'].excluded = true;
+
+    const plan = generateDailyPlan(state, { today: TODAY });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all.map((item) => item.skill).sort()).toEqual(
+      ['leg-raises', 'pullups', 'pushups', 'squats'].sort(),
+    );
+    // 排除项要以「按你的要求」口径出现在解释里，而不是「今天优先级排后面」
+    expect(
+      plan.reasons.filter((reason) => reason.code === 'USER_EXCLUDE').map((r) => r.skill).sort(),
+    ).toEqual(['bridges', 'handstand-pushups']);
+    // 已关闭的科目不该再被当成「未选中」重复解释一次
+    expect(plan.reasons.some((reason) => reason.text.includes('优先级排在第'))).toBe(false);
+    // 排期说明必须交代实际门数（tagline 仍写「六艺全练」，不解释会让人以为设置没生效）
+    const schedule = plan.reasons.find((reason) => reason.code === 'TEXTBOOK_SCHEDULE');
+    expect(schedule?.text).toContain('你已长期关闭');
+    expect(schedule?.text).toContain('4 门');
+  });
+
+  it('模板模式下当天排除与长期关闭叠加：只排剩下的科目', () => {
+    const state = stateTrainedDaysAgo(2);
+    state.skills.bridges.excluded = true;
+
+    const plan = generateDailyPlan(state, {
+      today: TODAY,
+      excludeSkills: ['squats'],
+    });
+    const all = [plan.main, ...plan.assists].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    );
+    expect(all.map((item) => item.skill).sort()).toEqual(
+      ['handstand-pushups', 'leg-raises', 'pullups', 'pushups'].sort(),
+    );
+  });
+
   it('时间档 → 档位：装得下就用中级档，装不下才退到初级档', () => {
     const mid = [planOf(stateTrainedDaysAgo(2, 45), 45), planOf(stateTrainedDaysAgo(2, 60), 60)];
     for (const plan of mid) {
@@ -1111,5 +1153,40 @@ describe('highlight · 富文本高亮引擎', () => {
     expect(stats.good).toBeGreaterThan(0);
     expect(stats.risk).toBeGreaterThan(0);
     expect(stats.term).toBeGreaterThan(0);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * 顺位门控 —— 六艺十式是线性阶梯，不是 10 个独立目标
+ * ------------------------------------------------------------------------ */
+
+describe('顺位门控 · 十式是线性阶梯', () => {
+  const base = (over: Partial<TrainingSkill> = {}): TrainingSkill => ({
+    ...skill('pushups', 1, 0),
+    ...over,
+  });
+
+  it('第 1 式永远可直接完成（没有前置）', () => {
+    expect(missingPrerequisites(base(), 1)).toEqual([]);
+  });
+
+  it('前一式没完成时，本式被拦住并报出缺哪几式', () => {
+    // 用户实测场景：翻到第 3 式误点完成键，进度跳到第 4 式，而 1、2 一次都没打卡
+    const broken = base({ currentStep: 4, completedSteps: [3] });
+    expect(missingPrerequisites(broken, 3)).toEqual([1, 2]);
+    expect(missingPrerequisites(broken, 4)).toEqual([1, 2]);
+  });
+
+  it('前置全部完成后放行', () => {
+    const ok = base({ currentStep: 3, completedSteps: [1, 2] });
+    expect(missingPrerequisites(ok, 3)).toEqual([]);
+  });
+
+  it('断档的旧数据也能被逐式补回来（不丢已完成标记）', () => {
+    const broken = base({ currentStep: 4, completedSteps: [3] });
+    // 依次补完第 1、2 式后，链条恢复连续且第 3 式仍在
+    const repaired = base({ currentStep: 4, completedSteps: [1, 2, 3] });
+    expect(missingPrerequisites(repaired, 4)).toEqual([]);
+    expect(broken.completedSteps).toContain(3);
   });
 });

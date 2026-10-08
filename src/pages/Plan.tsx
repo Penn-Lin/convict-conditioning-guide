@@ -30,6 +30,7 @@ import {
   Settings2,
   SlidersHorizontal,
   TrendingUp,
+  Wrench,
 } from 'lucide-react';
 import type { ArtSlug } from '@/types';
 import type { ProgressionVerdict, ScheduleMode } from '@/types/plan';
@@ -67,6 +68,7 @@ export function Plan() {
     finishSession,
     completeStep,
     setScheduleMode,
+    setExcluded,
   } = useTraining();
 
   /** 当前生效的排期模式（当天指定 > 档案偏好 > auto） */
@@ -105,15 +107,28 @@ export function Plan() {
     (item): item is NonNullable<typeof item> => item !== null,
   );
 
+  /**
+   * 长期关闭的科目（`TrainingSkill.excluded`）。
+   *
+   * 与「今天不想练哪门」是两个层级：那个存在 `plan.appliedOptions.excludeSkills`，
+   * 明天自动失效；这个存在六艺状态里，直到用户自己关掉开关。
+   */
+  const excludedSkills = ART_ORDER.filter((slug) => store.skills[slug].excluded);
+
   /*
-   * 原书模板未包含的艺。
+   * 原书模板未包含、且**不是用户主动关掉**的艺。
    *
    * 「初试身手」原书就是只练四艺（见 `TEXTBOOK_PLANS`），但用户打开训练页只会看到
    * 四项，既不知道为什么，也不知道另一套计划里是六项 —— 这个信息原先只存在于
    * 「调整」抽屉里，等于藏起来了。这里在计划页直接说清。
+   *
+   * v5 起把「用户自己关掉的」排除在外：那种情况下该说的是「你关的」，
+   * 而不是「原书不让练」—— 两句话混在一起会让人以为自己的设置没生效。
    */
   const missingFromTemplate: ArtSlug[] = textbook
-    ? ART_ORDER.filter((slug) => !textbook.arts.includes(slug))
+    ? ART_ORDER.filter(
+        (slug) => !textbook.arts.includes(slug) && !excludedSkills.includes(slug),
+      )
     : [];
   const artNames = (slugs: readonly ArtSlug[]) =>
     slugs.map((slug) => getArt(slug)?.nameZh ?? slug).join('、');
@@ -258,6 +273,20 @@ export function Plan() {
                     {artNames(missingFromTemplate)}不在此列 —— 原书说「只有在这些基本动作对你而言
                     已是驾轻就熟之时，你才可以尝试桥和倒立撑」。想现在就把六艺排进来，点右上角
                     「调整」切到「{TEXTBOOK_PLANS['textbook-steady'].name}」。
+                  </span>
+                </p>
+              </div>
+            ) : null}
+
+            {/* 用户自己长期关掉的科目：说清「这是你设置的」，以及怎么改回来 */}
+            {excludedSkills.length > 0 ? (
+              <div className="mt-3 rounded-md border border-border bg-surface2 px-3 py-2.5">
+                <p className="flex items-start gap-1.5 text-xs leading-relaxed text-text">
+                  <Wrench aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+                  <span>
+                    你已长期关闭{artNames(excludedSkills)}，今天与之后的计划都不排它们。
+                    想恢复就点右上角「调整」，在「没环境练的科目」里关掉那个开关 ——
+                    那是个长期设置，不是只影响今天。
                   </span>
                 </p>
               </div>
@@ -419,6 +448,8 @@ export function Plan() {
         resetPlanOptions={resetPlanOptions}
         scheduleMode={scheduleMode}
         onScheduleModeChange={setScheduleMode}
+        excludedSkills={excludedSkills}
+        onExcludedChange={setExcluded}
       />
       <LogSheet
         open={logOpen}

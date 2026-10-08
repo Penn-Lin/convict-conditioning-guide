@@ -30,6 +30,7 @@ import { formatVolume } from '@/lib/plan/volumeLadder';
 import { FATIGUE_BUTTONS } from '@/lib/plan/progression';
 import { allChecked, checkedCount } from '@/lib/checklist';
 import { useTraining } from '@/hooks/TrainingProvider';
+import { useConfirm } from '@/hooks/useConfirm';
 import type { SessionResult } from '@/hooks/useTrainingState';
 import { Sheet } from '@/components/ui/Sheet';
 import { Button } from '@/components/ui/Button';
@@ -120,7 +121,8 @@ function SetRow({
  * <LogSheet open={open} onClose={close} items={items} />
  */
 export function LogSheet({ open, onClose, items, onSubmit }: LogSheetProps) {
-  const { store, goalsOf, toggleStepCheck } = useTraining();
+  const { store, goalsOf, toggleStepCheck, missingStepsOf } = useTraining();
+  const confirm = useConfirm();
 
   /** 每组实际值，默认 = 目标值 */
   const initialActuals = useMemo(() => {
@@ -145,16 +147,45 @@ export function LogSheet({ open, onClose, items, onSubmit }: LogSheetProps) {
     });
   };
 
-  const handleSubmit = () => {
-    /** 勾满条件且用户没取消勾选的项 → 提交后推进式号 */
-    const advanceSkills = items
-      .filter((item) => {
-        if (advance[item.skill] === false) return false;
-        const goals = goalsOf(item.skill, item.stepNo);
-        const checks = store.skills[item.skill].checks[item.stepNo];
-        return allChecked(checks, goals.length);
-      })
-      .map((item) => item.skill);
+  /** 本次提交会推进式号的项（受顺位门控约束） */
+  const advanceItems = items.filter((item) => {
+    if (advance[item.skill] === false) return false;
+    // 前置式没完成 → 本次不推进（与 hooks 里 completeStep 的守卫同源）
+    if (missingStepsOf(item.skill, item.stepNo).length > 0) return false;
+    const goals = goalsOf(item.skill, item.stepNo);
+    const checks = store.skills[item.skill].checks[item.stepNo];
+    return allChecked(checks, goals.length);
+  });
+
+  const handleSubmit = async () => {
+    /*
+     * 二次确认（v5）。
+     *
+     * 这一步原先是一按即交：手机在训练完最累的时候操作，误触一次就把
+     * 「难度推进」和「训练记录」一起写下去了 —— 而推进又会改变后续所有计划。
+     * 这里把「会发生什么」摆出来再让用户按第二下；
+     * `advanceItems` 为空时（只是记录、不推进）文案随之改成纯记录口径。
+     */
+    const ok = await confirm({
+      title: advanceItems.length > 0 ? '提交记录，并推进到下一式？' : '提交这次训练记录？',
+      description:
+        advanceItems.length > 0
+          ? `以下 ${advanceItems.length} 门的条件已勾满，提交后会进入下一式。`
+          : '提交后会按完成度、疲劳与间隔重算明天的计划。',
+      details:
+        advanceItems.length > 0
+          ? advanceItems.map((item) => {
+              const next = getArt(item.skill)?.moves.find(
+                (move) => move.stepNo === item.stepNo + 1,
+              );
+              return `${getArt(item.skill)?.nameZh ?? item.skill}：第 ${item.stepNo} 式已完成${next ? `，进入第 ${item.stepNo + 1} 式「${next.nameZh}」` : '，这是最后一式'}`;
+            })
+          : undefined,
+      confirmLabel: advanceItems.length > 0 ? '确认提交并推进' : '确认提交',
+      cancelLabel: '返回修改',
+      tone: 'body',
+    });
+    if (!ok) return;
 
     onSubmit(
       {
@@ -166,7 +197,7 @@ export function LogSheet({ open, onClose, items, onSubmit }: LogSheetProps) {
         fatigue,
         aborted,
       },
-      advanceSkills,
+      advanceItems.map((item) => item.skill),
     );
 
     onClose();
@@ -207,7 +238,7 @@ export function LogSheet({ open, onClose, items, onSubmit }: LogSheetProps) {
             </div>
           </div>
 
-          <Button className="w-full" size="lg" onClick={handleSubmit}>
+          <Button className="w-full" size="lg" onClick={() => { void handleSubmit(); }}>
             <Check aria-hidden="true" className="h-4 w-4" strokeWidth={3} />
             完成训练并记录
           </Button>
@@ -224,6 +255,7 @@ export function LogSheet({ open, onClose, items, onSubmit }: LogSheetProps) {
           const satisfied = allChecked(checks, goals.length);
           const completed = store.skills[item.skill].completedSteps.includes(item.stepNo);
           const nextMove = art?.moves.find((move) => move.stepNo === item.stepNo + 1);
+          const missing = missingStepsOf(item.skill, item.stepNo);
           const values = actuals[item.skill] ?? [];
           const reachedSets = values.filter((value) => value >= item.targetPerSet).length;
 
@@ -286,8 +318,14 @@ export function LogSheet({ open, onClose, items, onSubmit }: LogSheetProps) {
                     readOnly={completed}
                   />
 
-                  {/* 勾满 → 出现默认勾选的推进确认 */}
-                  {satisfied && !completed ? (
+                  {/* 勾满 → 出现默认勾选的推进确认；被顺位门控挡住时不出现，改为说明 */}
+                  {satisfied && !completed && missing.length > 0 ? (
+                    <p className="mt-3 rounded-md bg-surface2 px-3 py-2 text-xs leading-relaxed text-muted">
+                      条件已勾满，但第 {missing.join('、')} 式还没标记完成 ——
+                      顺位没跟上，本次<b className="text-text">只记录、不推进</b>。
+                      去「{art?.nameZh}第 {missing[0]} 式」补打卡后再提交。
+                    </p>
+                  ) : satisfied && !completed ? (
                     <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md bg-success-soft px-3 py-2">
                       <input
                         type="checkbox"

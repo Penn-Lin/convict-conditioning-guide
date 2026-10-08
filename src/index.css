@@ -287,6 +287,53 @@ body.sheet-open {
 }
 
 /* ===========================================================================
+   二次确认弹窗（原生 <dialog> · v5）
+   —— 与 dialog.sheet 同一套选型理由：焦点陷阱 / Esc / ::backdrop 免费。
+   —— 与抽屉的差别只在形态：桌面与手机都是**居中小卡**（确认是一次决策，
+      不是浏览内容，贴底反而让人误以为可以慢慢看）。
+   —— 同样刻意不加 @layer，理由与 dialog.sheet 一致。
+   —— 注意：这里**不增删 `body.sheet-open`** —— 本弹窗常常开在某个抽屉之上，
+      动那个类会把底下仍在打开的抽屉的滚动锁一并解掉。
+   =========================================================================== */
+dialog.confirm {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(420px, calc(100vw - 40px));
+  max-height: 84vh;
+  max-height: 84dvh;
+  padding: 0;
+  border: none;
+  border-radius: 16px;
+  background-color: rgb(var(--surface));
+  color: rgb(var(--text));
+  box-shadow: 0 20px 60px rgb(var(--shadow-color) / 0.28);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+dialog.confirm::backdrop {
+  background-color: rgb(0 0 0 / 0.55);
+}
+
+dialog.confirm[open] {
+  animation: confirm-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ===========================================================================
    大图查看（原生 <dialog> · v3）
    —— 与 dialog.sheet 同一套选型理由（见上）：焦点陷阱 / Esc / ::backdrop 免费。
    —— 用「铺满视口的深色底」而不是白卡：教学图本身是浅底照片，压在深底上

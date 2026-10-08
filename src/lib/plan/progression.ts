@@ -22,6 +22,31 @@ import { getMove } from '@/data';
 import { FATIGUE, PROGRESSION_DEFAULT, STEP_ADJUSTMENTS } from './config';
 import { formatVolume } from './volumeLadder';
 
+/* ---------------------------------------------------------------------------
+ * 顺位门控（六艺十式是**线性阶梯**，不是 10 个独立目标）
+ * ------------------------------------------------------------------------
+ * 存在的理由（用户实测踩到的）：在详情页翻到第 3 式时误点了「完成本式」，
+ * `currentStep` 直接跳到 4，而第 1、2 式其实一次都没打卡 —— 进度链条断在中间。
+ *
+ * 引擎与 hooks 都只做**事实记录**，无法靠自己知道「1、2 没做」这件事是否允许；
+ * 因此把判据收敛到这两个纯函数里，UI / hooks / 单测共用同一份定义。
+ * ------------------------------------------------------------------------ */
+
+/** 第 `stepNo` 式之前**尚未完成**的式号（升序）；空数组 = 允许完成本式 */
+export function missingPrerequisites(skill: TrainingSkill, stepNo: number): number[] {
+  const done = new Set(skill.completedSteps);
+  const missing: number[] = [];
+  for (let step = 1; step < stepNo; step += 1) {
+    if (!done.has(step)) missing.push(step);
+  }
+  return missing;
+}
+
+/** 本式是否可以标记完成（前面的式已全部完成） */
+export function isStepUnlocked(skill: TrainingSkill, stepNo: number): boolean {
+  return missingPrerequisites(skill, stepNo).length === 0;
+}
+
 /** 汇总实况 */
 export interface SessionOutcome {
   plannedTotal: number;

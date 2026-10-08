@@ -125,6 +125,8 @@ export function Home() {
       ...art,
       done,
       finished: done >= MOVES_PER_ART,
+      /** 用户长期关闭了这一门（没环境练 / 暂时不练）—— 进度照常显示，只是不再排进计划 */
+      excluded: skill.excluded,
       stepName: art.moves.find((move) => move.stepNo === stepNo)?.nameZh ?? '',
       stepNo,
     };
@@ -133,8 +135,10 @@ export function Home() {
   /* ---- ④ 引导区：有记录时挑「最久没练且还没练完」的那门 ---- */
   const stalest = (() => {
     if (!ready || sessionCount === 0) return null;
+    // 长期关闭的艺不参与推荐 —— 建议用户去练一门他明确说了「没环境练」的科目，
+    // 是这类推荐最容易犯的错。
     const pending = ART_ORDER.filter(
-      (slug) => skills[slug].completedSteps.length < MOVES_PER_ART,
+      (slug) => skills[slug].completedSteps.length < MOVES_PER_ART && !skills[slug].excluded,
     );
     if (pending.length === 0) return null;
     const scored = pending.map((slug) => {
@@ -314,6 +318,12 @@ export function Home() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline gap-2">
                       <span className="truncate text-sm font-bold text-text">{art.nameZh}</span>
+                      {/* 长期关闭态：用中性 chip 而不是红字 —— 这是用户自己的设置，不是异常 */}
+                      {art.excluded ? (
+                        <span className="shrink-0 rounded-pill bg-surface2 px-1.5 py-px text-[10px] font-semibold text-muted">
+                          已关闭
+                        </span>
+                      ) : null}
                       <span className="tnum ml-auto shrink-0 font-mono text-xs font-semibold text-muted">
                         {art.done}
                         <span className="text-subtle">/{MOVES_PER_ART}</span>
